@@ -1,0 +1,58 @@
+test_that("parse_symbols cleans, uppercases, and drops empties", {
+  expect_equal(parse_symbols("voo, tqqq , SCHD"), c("VOO", "TQQQ", "SCHD"))
+  expect_equal(parse_symbols("VOO,,SCHD,"), c("VOO", "SCHD"))
+  expect_equal(parse_symbols(""), character(0))
+  expect_equal(parse_symbols(" , , "), character(0))
+})
+
+test_that("parse_weights handles blanks, trailing commas, and bad tokens", {
+  expect_equal(parse_weights("40, 30, 30"), c(40, 30, 30))
+  expect_equal(parse_weights("1,2,"), c(1, 2))
+  expect_true(is.na(parse_weights("abc")))
+  expect_equal(parse_weights(".5, 40."), c(0.5, 40))
+})
+
+test_that("valid inputs produce no errors", {
+  expect_length(portfolio_input_errors(c("VOO", "QQQ"), c(1, 2), "SPY", 5), 0)
+  expect_length(portfolio_input_errors("VOO", 100, "^GSPC", 1), 0)
+})
+
+test_that("each validation rule fires with its exact message", {
+  e <- portfolio_input_errors
+  expect_true("Enter at least one symbol." %in%
+              e(character(0), numeric(0), "SPY", 5))
+  expect_true("Remove duplicate symbols." %in%
+              e(c("VOO", "VOO"), c(1, 1), "SPY", 5))
+  expect_true("Number of symbols and weights must match." %in%
+              e("VOO", c(1, 2), "SPY", 5))
+  expect_true("Weights must be numeric." %in%
+              e("VOO", NA_real_, "SPY", 5))
+  expect_true("Weights cannot be negative." %in%
+              e(c("A", "B"), c(-1, 2), "SPY", 5))
+  expect_true("At least one weight must be positive." %in%
+              e(c("A", "B"), c(0, 0), "SPY", 5))
+  expect_true("Enter a benchmark symbol." %in%
+              e("VOO", 1, "", 5))
+  expect_true("Enter a single benchmark symbol." %in%
+              e("VOO", 1, "SPY, QQQ", 5))
+  expect_true("Years of history must be at least 1." %in%
+              e("VOO", 1, "SPY", NA))
+  expect_true("Years of history must be at least 1." %in%
+              e("VOO", 1, "SPY", 0))
+})
+
+test_that("non-finite weights are rejected (Inf regression)", {
+  e <- portfolio_input_errors
+  expect_true("Weights must be numeric." %in% e(c("A", "B"), c(Inf, 1), "SPY", 5))
+  expect_true("Weights must be numeric." %in% e(c("A", "B"), c(NaN, 1), "SPY", 5))
+  # "1e999" parses to Inf
+  expect_true("Weights must be numeric." %in%
+              e(c("A", "B"), parse_weights("1e999, 1"), "SPY", 5))
+})
+
+test_that("weights normalize from any scale", {
+  expect_equal(normalize_weights(c(1, 2)), c(1 / 3, 2 / 3))
+  expect_equal(normalize_weights(c(40, 30, 30)), c(0.4, 0.3, 0.3))
+  expect_equal(sum(normalize_weights(c(7, 11, 13))), 1)
+  expect_equal(normalize_weights(c(1, 0)), c(1, 0))
+})

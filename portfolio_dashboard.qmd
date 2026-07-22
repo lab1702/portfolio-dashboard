@@ -1,0 +1,242 @@
+---
+title: "Portfolio Backtest Dashboard"
+format: dashboard
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+library(shiny)
+library(quantmod)
+library(PerformanceAnalytics)
+source("portfolio_core.R")
+```
+
+## {.sidebar}
+
+```{r}
+textInput("symbols", "Symbols (comma-separated)", value = "VOO, TQQQ, SCHD")
+textInput("weights", "Weights (comma-separated)", value = "40, 30, 30")
+textInput("benchmark", "Benchmark", value = "SPY")
+numericInput("years", "Years of history", value = 5, min = 1, max = 30, step = 1)
+selectInput("rebal", "Rebalance",
+  choices = c("Monthly" = "months", "Quarterly" = "quarters",
+              "Yearly" = "years", "Buy & Hold" = "none"),
+  selected = "months")
+actionButton("run", "Run Backtest", class = "btn-primary")
+```
+
+Dividends are reinvested (adjusted prices). If a fund's history is
+shorter than the requested window, the analysis is trimmed to the
+common date range.
+
+Weights are relative and normalized automatically — e.g. weights
+`1, 2` allocate 33% and 67%.
+
+```{r}
+#| context: server
+
+parse_inputs <- eventReactive(input$run, {
+  syms  <- parse_symbols(input$symbols)
+  wts   <- parse_weights(input$weights)
+  bench <- toupper(trimws(input$benchmark))
+  errs  <- portfolio_input_errors(syms, wts, bench, input$years)
+  validate(need(length(errs) == 0, paste(errs, collapse = "\n")))
+  list(syms = syms, wts = normalize_weights(wts), bench = bench,
+       years = input$years,
+       rebal = input$rebal)
+}, ignoreNULL = FALSE)  # runs once on startup with defaults
+
+backtest <- reactive({
+  p <- parse_inputs()
+  from <- Sys.Date() - round(365.25 * p$years)
+
+  get_prices <- function(t) {
+    tryCatch(
+      Ad(getSymbols(t, from = from, auto.assign = FALSE, warnings = FALSE)),
+      error = function(e) NULL
+    )
+  }
+
+  all_syms <- unique(c(p$syms, p$bench))
+  raw <- setNames(lapply(all_syms, get_prices), all_syms)
+  failed <- names(raw)[vapply(raw, is.null, logical(1))]
+  validate(need(length(failed) == 0,
+    paste("Could not download:", paste(failed, collapse = ", "))))
+
+  prices <- do.call(merge, raw)
+  colnames(prices) <- all_syms
+  prices <- na.omit(prices)
+  validate(need(nrow(prices) > 30, "Not enough overlapping history for these symbols."))
+
+  c(list(p = p), compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal))
+})
+
+vb_note <- function(txt) {
+  tags$span(txt, style = paste(
+    "display: block; font-size: 0.72rem; font-weight: normal;",
+    "line-height: 1.25; margin-top: 0.35rem; opacity: 0.9;"))
+}
+
+output$vb_growth <- renderText({
+  bt <- backtest()
+  fmt_dollar(grew_to(bt$port))
+})
+
+output$vb_bench_growth <- renderText({
+  bt <- backtest()
+  sprintf("%s (%s)", fmt_dollar(grew_to(bt$bench)), bt$p$bench)
+})
+
+output$vb_cagr <- renderUI({
+  bt <- backtest()
+  cagr  <- Return.annualized(bt$port, scale = bt$scale)[1]
+  bench <- Return.annualized(bt$bench, scale = bt$scale)[1]
+  tagList(fmt_pct(cagr),
+    vb_note(sprintf("Avg. yearly growth — %s did %s",
+                    bt$p$bench, fmt_pct(bench))))
+})
+
+output$vb_sharpe <- renderUI({
+  bt <- backtest()
+  s <- SharpeRatio.annualized(bt$port, scale = bt$scale, geometric = TRUE)[1]
+  verdict <- sharpe_verdict(s)
+  tagList(sprintf("%.2f", s),
+    vb_note(sprintf("Reward per unit of risk — %s (1+ good, 2+ great)",
+                    verdict)))
+})
+
+output$vb_maxdd <- renderUI({
+  bt <- backtest()
+  dd <- maxDrawdown(bt$port)
+  tagList(fmt_pct(-dd),
+    vb_note(sprintf("Biggest peak-to-trough loss — %s at the peak fell to %s",
+                    fmt_dollar(START_CAPITAL),
+                    fmt_dollar(START_CAPITAL * (1 - dd)))))
+})
+
+output$vb_period <- renderText({
+  bt <- backtest()
+  sprintf("%s – %s", format(start(bt$port), "%b %Y"), format(end(bt$port), "%b %Y"))
+})
+
+output$perf_chart <- renderPlot({
+  bt <- backtest()
+  charts.PerformanceSummary(bt$combined,
+    main = sprintf("Portfolio (%s) vs %s",
+                   paste0(round(bt$p$wts * 100, 1), "% ", bt$p$syms, collapse = " / "),
+                   bt$p$bench))
+})
+
+output$fund_chart <- renderPlot({
+  bt <- backtest()
+  chart.CumReturns(bt$returns[, bt$p$syms, drop = FALSE],
+    wealth.index = TRUE, legend.loc = "topleft",
+    main = "Growth of $1 by Holding")
+})
+
+output$stats_table <- renderTable({
+  bt <- backtest()
+  build_stats_table(bt$port, bt$returns, bt$p$bench, bt$p$syms, bt$scale)
+}, rownames = TRUE)
+
+output$calendar_table <- renderTable({
+  bt <- backtest()
+  table.CalendarReturns(bt$port)
+}, rownames = TRUE, digits = 1, na = "")
+
+output$dd_table <- renderTable({
+  bt <- backtest()
+  build_drawdown_table(bt$port, bt$scale)
+})
+```
+
+## Column {width=20%}
+
+```{r}
+#| content: valuebox
+#| title: "$10,000 grew to"
+#| icon: cash-stack
+#| color: primary
+textOutput("vb_growth")
+```
+
+```{r}
+#| content: valuebox
+#| title: "In benchmark it grew to"
+#| icon: bank
+#| color: light
+textOutput("vb_bench_growth")
+```
+
+```{r}
+#| content: valuebox
+#| title: "CAGR"
+#| icon: graph-up-arrow
+#| color: success
+uiOutput("vb_cagr")
+```
+
+```{r}
+#| content: valuebox
+#| title: "Sharpe"
+#| icon: speedometer2
+#| color: info
+uiOutput("vb_sharpe")
+```
+
+```{r}
+#| content: valuebox
+#| title: "Max Drawdown"
+#| icon: graph-down-arrow
+#| color: warning
+uiOutput("vb_maxdd")
+```
+
+```{r}
+#| content: valuebox
+#| title: "Period"
+#| icon: calendar3
+#| color: secondary
+textOutput("vb_period")
+```
+
+## Column {width=40%}
+
+### Row
+
+```{r}
+#| title: "Performance vs Benchmark"
+plotOutput("perf_chart")
+```
+
+### Row
+
+```{r}
+#| title: "Per-Holding Growth"
+plotOutput("fund_chart")
+```
+
+## Column {width=40%}
+
+### Row
+
+```{r}
+#| title: "Key Statistics"
+tableOutput("stats_table")
+```
+
+### Row
+
+```{r}
+#| title: "Monthly Returns (%)"
+tableOutput("calendar_table")
+```
+
+### Row
+
+```{r}
+#| title: "Worst Drawdowns"
+tableOutput("dd_table")
+```

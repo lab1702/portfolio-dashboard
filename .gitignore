@@ -1,0 +1,9 @@
+# Quarto rendered output
+portfolio_dashboard.html
+portfolio_dashboard_files/
+/.quarto/
+
+# R session artifacts
+.Rhistory
+.RData
+.Rproj.user/
