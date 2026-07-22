@@ -4,6 +4,8 @@ An interactive [Quarto](https://quarto.org) dashboard (R + Shiny) for backtestin
 a portfolio of tickers against a benchmark, using dividend-adjusted prices from
 Yahoo Finance.
 
+![Portfolio Backtest Dashboard](images/dashboard.png)
+
 ## Features
 
 - **Any tickers Yahoo knows** — equities, ETFs, crypto (`BTC-USD`), indexes
