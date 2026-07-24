@@ -59,7 +59,21 @@ backtest <- reactive({
   }
 
   all_syms <- unique(c(p$syms, p$bench))
-  raw <- setNames(lapply(all_syms, get_prices), all_syms)
+
+  # The downloads are sequential and block the session, so the wait is stated
+  # instead of read as a frozen dashboard. The detail names the symbol being
+  # waited on before the request goes out; the bar advances only once that
+  # symbol is actually in hand, so it measures work done rather than work
+  # started — a slow ticker shows as a stalled bar with its own name on it.
+  raw <- withProgress(message = "Downloading prices", value = 0, {
+    setNames(lapply(seq_along(all_syms), function(i) {
+      incProgress(0, detail = all_syms[i])
+      px <- get_prices(all_syms[i])
+      incProgress(1 / length(all_syms))
+      px
+    }), all_syms)
+  })
+
   failed <- names(raw)[vapply(raw, is.null, logical(1))]
   validate(need(length(failed) == 0,
     paste("Could not download:", paste(failed, collapse = ", "))))
