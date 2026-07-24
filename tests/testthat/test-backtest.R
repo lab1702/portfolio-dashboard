@@ -104,6 +104,32 @@ test_that("a 100% single-holding portfolio matches that holding's stats", {
   expect_equal(st["Portfolio", "Max Drawdown"], st["A", "Max Drawdown"])
 })
 
+test_that("every rebalance frequency the sidebar offers runs end-to-end", {
+  # "months" and "none" were the only two exercised here; a bad choice value in
+  # the other two would have surfaced in the browser, not in this suite.
+  set.seed(19)
+  dates <- weekday_dates("2019-01-07", 800)
+  pA <- 100 * cumprod(c(1, 1 + rnorm(799, 6e-4, 0.011)))
+  pB <- 100 * cumprod(c(1, 1 + rnorm(799, 3e-4, 0.008)))
+  prices <- make_prices(dates, A = pA, B = pB, BEN = pB)
+
+  run <- function(rb) compute_backtest(prices, c("A", "B"), c(0.6, 0.4), "BEN", rb)
+  got <- lapply(REBAL_CHOICES, run)
+  for (nm in names(got)) {
+    expect_equal(nrow(got[[nm]]$port), nrow(got[[nm]]$returns), info = nm)
+    expect_true(all(is.finite(as.numeric(got[[nm]]$port))), info = nm)
+    expect_equal(colnames(got[[nm]]$port), "Portfolio", info = nm)
+  }
+
+  # and the frequency is actually being applied — drifting weights make each
+  # schedule land somewhere different
+  paths <- lapply(got, function(b) as.numeric(b$port))
+  for (pair in list(c("Monthly", "Quarterly"), c("Quarterly", "Yearly"),
+                    c("Yearly", "Buy & Hold")))
+    expect_false(isTRUE(all.equal(paths[[pair[1]]], paths[[pair[2]]])),
+                 info = paste(pair, collapse = " vs "))
+})
+
 test_that("drawdown table formats depth, dates, and recovery", {
   dates <- weekday_dates("2020-01-06", 40)
   pv <- c(100, 110, 99, 90, 111, seq(112, length.out = 35, by = 1))
@@ -127,6 +153,10 @@ test_that("a series that never draws down yields no rows at all", {
   dd <- build_drawdown_table(r, scale = 365.25)
   expect_equal(nrow(dd), 0)
   expect_equal(names(dd), c("From", "Trough", "To", "Depth", "Days"))
+  # ifelse() returns the type of its test, so the empty case used to hand back
+  # logical date columns — a shape no non-empty table could ever have.
+  for (col in c("From", "Trough", "To"))
+    expect_type(dd[[col]], "character")
 })
 
 test_that("unrecovered drawdowns show 'ongoing' and crypto scale uses Days", {

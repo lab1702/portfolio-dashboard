@@ -30,6 +30,31 @@ test_that("sharpe_verdict bands match the '1+ good, 2+ great' caption", {
   expect_equal(sharpe_verdict(Inf), "n/a")
 })
 
+test_that("a Sharpe with no denominator is reported, not printed", {
+  # A constant-price series (halted ticker, stable-NAV fund) divides by ~0 and
+  # yields a finite ~1.3e14. Printed with %.2f that was an eighteen-character
+  # cell graded "great" — an absent denominator dressed as a spectacular result.
+  expect_equal(fmt_sharpe(1.34674571048612e14), "n/a")
+  expect_equal(sharpe_verdict(1.34674571048612e14), "n/a")
+  expect_match(sharpe_caption(1.34674571048612e14), "not measurable")
+
+  expect_equal(fmt_sharpe(SHARPE_MAX), sprintf("%.2f", SHARPE_MAX))  # boundary
+  expect_equal(fmt_sharpe(SHARPE_MAX + 0.1), "n/a")
+  expect_equal(fmt_sharpe(-(SHARPE_MAX + 0.1)), "n/a")  # both tails
+})
+
+test_that("fmt_sharpe formats a whole column and never widens it past 'n/a'", {
+  # build_stats_table hands it every row's Sharpe at once
+  out <- fmt_sharpe(c(1.234, -0.5, Inf, NA_real_, NaN, 1e14))
+  expect_equal(out, c("1.23", "-0.50", "n/a", "n/a", "n/a", "n/a"))
+})
+
+test_that("the printed Sharpe and its printed grade never disagree", {
+  for (s in list(-3, 0, 0.5, 1, 2, 7, SHARPE_MAX, SHARPE_MAX + 1, Inf, NA_real_))
+    expect_equal(fmt_sharpe(s) == "n/a", sharpe_verdict(s) == "n/a",
+                 info = format(s))
+})
+
 test_that("sharpe_caption discloses the risk-free rate it was graded against", {
   cap <- sharpe_caption(1.4)
   expect_true(grepl("good", cap, fixed = TRUE))

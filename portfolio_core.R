@@ -2,6 +2,9 @@
 # the Shiny layer so it can be unit-tested (run: Rscript tests/run_tests.R).
 # Requires xts and PerformanceAnalytics to be loaded by the caller.
 
+# The "$10,000 grew to" value box states this figure in its own title, which is
+# a Quarto chunk option and so cannot interpolate R. Changing this constant
+# means editing that title in portfolio_dashboard.qmd by hand.
 START_CAPITAL <- 10000
 
 # ── Visual system ────────────────────────────────────────────────────────────
@@ -177,6 +180,14 @@ fmt_month_day_year <- function(d) {
   out
 }
 
+# The control's options and the caption's wording are one vocabulary, so they
+# live together: the sidebar builds its selectInput from REBAL_CHOICES and the
+# caption reads REBAL_LABELS, and a test holds the two sets equal. Keeping the
+# choice list in the .qmd let a new option arrive with no label, which read as
+# "rebalanced NA" under the chart while every test still passed.
+REBAL_CHOICES <- c(Monthly = "months", Quarterly = "quarters",
+                   Yearly = "years", "Buy & Hold" = "none")
+
 REBAL_LABELS <- c(months = "monthly", quarters = "quarterly",
                   years = "yearly", none = "buy & hold, never rebalanced")
 
@@ -189,8 +200,24 @@ fmt_dollar <- function(x)
 
 grew_to <- function(r, capital = START_CAPITAL) capital * prod(1 + as.numeric(r))
 
+# A Sharpe ratio divides return by volatility, so a series with no volatility —
+# a halted ticker, a stable-NAV fund, a window in which the price never moved —
+# divides by almost nothing and lands on a *finite* number in the trillions.
+# That is an absent denominator, not a spectacular portfolio: printed verbatim
+# it graded a frozen series "great" and put an eighteen-character cell in the
+# stats table, pushing the last column out of the card. Past this bound the
+# ratio has stopped measuring anything, so it is reported as unavailable rather
+# than rounded to two decimals.
+SHARPE_MAX <- 100
+
+sharpe_measurable <- function(s) is.finite(s) & abs(s) <= SHARPE_MAX
+
+# The printed number and the printed grade read the same predicate, so a card
+# can never show a figure its own caption calls unavailable.
+fmt_sharpe <- function(s) ifelse(sharpe_measurable(s), sprintf("%.2f", s), "n/a")
+
 sharpe_verdict <- function(s) {
-  if (!is.finite(s)) return("n/a")
+  if (!isTRUE(sharpe_measurable(s))) return("n/a")
   as.character(cut(s, c(-Inf, 0, 1, 2, Inf),
                    labels = c("poor", "fair", "good", "great"),
                    right = FALSE))
@@ -204,9 +231,12 @@ sharpe_verdict <- function(s) {
 # unit of risk, and it flatters every portfolio it touches.
 RISK_FREE_RATE <- 0
 
-sharpe_caption <- function(s)
+sharpe_caption <- function(s) {
+  if (!isTRUE(sharpe_measurable(s)))
+    return("Return per unit of risk — not measurable here: volatility over this window is effectively zero.")
   sprintf("Return per unit of risk — %s (1+ good, 2+ great), against a %s risk-free rate.",
           sharpe_verdict(s), fmt_pct(RISK_FREE_RATE))
+}
 
 # Everything downstream of the price download. `prices` is a merged, na.omit'd
 # xts of adjusted prices whose columns are named by symbol; `wts` is already
@@ -240,7 +270,7 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
   data.frame(
     "Return (ann.)"  = fmt_pct(as.numeric(ann[1, ])),
     "Std Dev (ann.)" = fmt_pct(as.numeric(ann[2, ])),
-    "Sharpe"         = sprintf("%.2f", as.numeric(ann[3, ])),
+    "Sharpe"         = fmt_sharpe(as.numeric(ann[3, ])),
     "Max Drawdown"   = fmt_pct(-apply(cols, 2, maxDrawdown)),
     row.names = colnames(cols),
     check.names = FALSE
@@ -255,7 +285,14 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
 build_drawdown_table <- function(port, scale) {
   dd <- suppressWarnings(table.Drawdowns(port, top = 5))
   dd <- dd[is.finite(dd$Depth) & dd$Depth < 0, , drop = FALSE]
-  fmt_date <- function(d) ifelse(is.na(d), "ongoing", fmt_month_day_year(d))
+  # ifelse() returns the type of its *test*, so on an empty table this handed
+  # back logical(0) and the date columns came out logi. Zero rows hid it; the
+  # columns are built as character either way now.
+  fmt_date <- function(d) {
+    out <- fmt_month_day_year(d)
+    out[is.na(d)] <- "ongoing"
+    as.character(out)
+  }
   df <- data.frame(
     From   = fmt_date(dd$From),
     Trough = fmt_date(dd$Trough),

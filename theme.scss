@@ -7,8 +7,9 @@
 //   · chrome — quiet, near-neutral surfaces and ink, so nothing competes with
 //     the data;
 //   · data — one validated categorical palette, shared by the charts, the
-//     tables and the value boxes, defined once in portfolio_core.R and mirrored
-//     in the $viz-* variables below.
+//     tables and the value boxes. It is defined once, in portfolio_core.R, and
+//     stays there: the chips and chart lines are painted in R. Only slot 1
+//     crosses into CSS, as $viz-series-1, because it doubles as the UI accent.
 //
 // Series hues are the validated categorical order (adjacent-pair CVD ΔE ≥ 8,
 // normal-vision ΔE ≥ 15 on this surface). Do not add a ninth hue or reorder
@@ -284,7 +285,10 @@ table.calendar {
   border-spacing: 1px; // surface gap between cells, not borders
   font-size: 0.72rem;
 
-  th { padding: 0.2rem 0.2rem; }
+  th {
+    padding: 0.2rem 0.2rem;
+    border-bottom: none;
+  }
 
   td.cal-cell {
     border: none;
@@ -297,6 +301,4 @@ table.calendar {
     font-weight: 600;
     border-left: 2px solid $viz-surface;
   }
-
-  th { border-bottom: none; }
 }

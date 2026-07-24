@@ -138,8 +138,12 @@ test_that("delta_vs_benchmark reports n/a instead of inventing a shortfall", {
 })
 
 test_that("rebal_label covers every choice the sidebar offers", {
-  for (choice in c("months", "quarters", "years", "none")) {
-    expect_true(nzchar(rebal_label(choice)))
-    expect_false(is.na(rebal_label(choice)))
+  # REBAL_CHOICES is what the selectInput is built from, so this reads the
+  # sidebar's actual vocabulary rather than a third hardcoded copy of it.
+  expect_setequal(unname(REBAL_CHOICES), names(REBAL_LABELS))
+  for (choice in REBAL_CHOICES) {
+    expect_true(nzchar(rebal_label(choice)), info = choice)
+    expect_false(is.na(rebal_label(choice)), info = choice)
   }
+  expect_true(all(nzchar(names(REBAL_CHOICES))))  # every option is labelled
 })

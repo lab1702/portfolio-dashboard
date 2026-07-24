@@ -22,10 +22,7 @@ textInput("symbols", "Symbols (comma-separated)", value = "VOO, TQQQ, SCHD")
 textInput("weights", "Weights (comma-separated)", value = "40, 30, 30")
 textInput("benchmark", "Benchmark", value = "SPY")
 numericInput("years", "Years of history", value = 5, min = 1, max = MAX_YEARS, step = 1)
-selectInput("rebal", "Rebalance",
-  choices = c("Monthly" = "months", "Quarterly" = "quarters",
-              "Yearly" = "years", "Buy & Hold" = "none"),
-  selected = "months")
+selectInput("rebal", "Rebalance", choices = REBAL_CHOICES, selected = "months")
 actionButton("run", "Run Backtest", class = "btn-primary")
 ```
 
@@ -67,7 +64,13 @@ backtest <- reactive({
   validate(need(length(failed) == 0,
     paste("Could not download:", paste(failed, collapse = ", "))))
 
-  prices <- do.call(merge, raw)
+  # unname() before do.call: a named list turns each ticker into a named
+  # argument to merge.xts, and a symbol matching one of its parameters would be
+  # eaten as that parameter rather than merged. Nothing reaches here in lower
+  # case today — parse_symbols and the benchmark both toupper, and R's partial
+  # matching is case-sensitive, so "ALL" is safe where "all" silently returns a
+  # one-column result. That is a guarantee two edits away from not holding.
+  prices <- do.call(merge, unname(raw))
   colnames(prices) <- all_syms
   prices <- na.omit(prices)
   validate(need(nrow(prices) > 30, "Not enough overlapping history for these symbols."))
@@ -107,7 +110,7 @@ output$vb_sharpe <- renderUI({
   bt <- backtest()
   s <- SharpeRatio.annualized(bt$port, scale = bt$scale,
                               Rf = RISK_FREE_RATE, geometric = TRUE)[1]
-  tagList(sprintf("%.2f", s), vb_note(sharpe_caption(s)))
+  tagList(fmt_sharpe(s), vb_note(sharpe_caption(s)))
 })
 
 output$vb_maxdd <- renderUI({
@@ -197,7 +200,8 @@ output$calendar_table <- renderUI({
   # colnames — those are built with %b and arrive localized ("Mrz", "Okt").
   tags$table(class = "table calendar",
     tags$thead(tags$tr(tags$th(""),
-      lapply(c(MONTH_ABB[seq_len(last - 1)], "Year"), tags$th))),
+      lapply(c(MONTH_ABB[seq_len(last - 1)], "Year"),
+             function(m) tags$th(scope = "col", m)))),
     tags$tbody(lapply(seq_len(nrow(cal)), function(i)
       tags$tr(tags$th(scope = "row", rownames(cal)[i]),
         lapply(seq_len(last), function(j)
