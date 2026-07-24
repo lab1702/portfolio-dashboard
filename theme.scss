@@ -102,14 +102,15 @@ $input-focus-border-color: $viz-series-1;
   background-color: $viz-surface;
   border-right: 1px solid $viz-hairline;
 
+  // Sentence case here too: the uppercased labels ran under the sidebar's
+  // collapse chevron.
   .form-label,
   label {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     color: $viz-ink-2;
     margin-bottom: 0.2rem;
+    padding-right: 1.5rem; // keep clear of the collapse toggle
   }
 
   .form-control,
@@ -173,8 +174,8 @@ $input-focus-border-color: $viz-series-1;
     flex-grow: 0;
 
     .bi {
-      font-size: 1.35rem;
-      opacity: 0.4;
+      font-size: 1.15rem;
+      opacity: 0.38;
     }
   }
 }
@@ -227,16 +228,18 @@ $input-focus-border-color: $viz-series-1;
   margin-bottom: 0;
   width: 100%;
 
+  // Header labels stay sentence case. Uppercasing them with letter-spacing cost
+  // roughly a fifth of the row width and pushed the last column out of the card.
   th {
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     color: $viz-muted;
     border-bottom: 1px solid $viz-rule;
     border-top: none;
-    white-space: nowrap;
     vertical-align: bottom;
+    // A two-word header wraps rather than clipping the column off the card.
+    white-space: normal;
+    hyphens: none;
   }
 
   td {
@@ -270,14 +273,19 @@ $input-focus-border-color: $viz-series-1;
 // black numerals. The sign is always printed, so colour is reinforcement and
 // never the only channel.
 
+// Fourteen columns have to fit without clipping December, so this grid runs
+// tighter than the other tables.
 table.calendar {
   border-collapse: separate;
-  border-spacing: 2px; // surface gap between cells, not borders
+  border-spacing: 1px; // surface gap between cells, not borders
+  font-size: 0.72rem;
+
+  th { padding: 0.2rem 0.2rem; }
 
   td.cal-cell {
     border: none;
     border-radius: 3px;
-    padding: 0.25rem 0.45rem;
+    padding: 0.18rem 0.22rem;
     text-align: right;
   }
 
