@@ -41,12 +41,44 @@ test_that("top_holdings keeps everything until the palette runs out", {
   expect_equal(top_holdings(sprintf("S%d", 1:7), rep(1, 7)), sprintf("S%d", 1:7))
 })
 
-test_that("top_holdings never asks for more colours than entity_colors has", {
+# The pairing of "which holdings are drawn" with "what colour each one gets" is
+# the invariant that matters, and only display_plan() decides both. Asking
+# top_holdings() and entity_colors() separately is what let them disagree:
+# selection is by weight, assignment was by list position, and a fixture whose
+# weights happened to descend in list order hid the collision for a whole round.
+test_that("every drawn holding gets a distinct real hue, wherever the weight sits", {
   syms <- sprintf("S%02d", 1:20)
-  kept <- top_holdings(syms, rev(seq_along(syms)))
-  cols <- entity_colors("SPY", syms)
-  expect_false(any(cols[kept] == INK_MUTED))  # every drawn line has a real hue
-  expect_false(anyDuplicated(cols[kept]) > 0)
+  fixtures <- list(
+    "largest last"   = seq_along(syms),
+    "largest first"  = rev(seq_along(syms)),
+    "largest in back half" = c(rep(1, 10), rep(9, 10)),
+    "largest split"  = rep(c(1, 9), 10)
+  )
+  for (nm in names(fixtures)) {
+    plan  <- display_plan("SPY", syms, fixtures[[nm]])
+    drawn <- plan$colors[plan$shown]
+    expect_false(any(drawn == INK_MUTED), info = nm)
+    expect_false(anyDuplicated(drawn) > 0, info = nm)
+  }
+})
+
+test_that("display_plan anchors the portfolio and the benchmark", {
+  plan <- display_plan("SPY", sprintf("S%02d", 1:20), seq_len(20))
+  expect_equal(plan$colors[["Portfolio"]], PORTFOLIO_INK)
+  expect_equal(plan$colors[["SPY"]], SERIES_SLOTS[1])
+})
+
+test_that("display_plan still colours every instrument for the stats table", {
+  syms <- sprintf("S%02d", 1:20)
+  plan <- display_plan("SPY", syms, seq_along(syms))
+  expect_setequal(names(plan$colors), c("Portfolio", "SPY", syms))
+})
+
+test_that("display_plan changes nothing when every holding fits", {
+  syms <- c("VOO", "TQQQ", "SCHD")
+  plan <- display_plan("SPY", syms, c(40, 30, 30))
+  expect_equal(plan$shown, syms)
+  expect_equal(plan$colors, entity_colors("SPY", syms))
 })
 
 test_that("top_holdings keeps the largest positions in input order", {
@@ -93,6 +125,16 @@ test_that("delta_vs_benchmark pairs each sign with its own arrow", {
   expect_match(behind$text, "^▼ 2\\.8 pts$")     # magnitude, sign in the arrow
 
   expect_equal(delta_vs_benchmark(0.1, 0.1)$class, "delta-good")  # a tie is not a loss
+})
+
+test_that("delta_vs_benchmark reports n/a instead of inventing a shortfall", {
+  # isTRUE(NA >= 0) is FALSE, which used to render a confident "▼ NA pts"
+  for (bad in list(NA_real_, NaN, Inf, -Inf)) {
+    d <- delta_vs_benchmark(bad, 0.1)
+    expect_equal(d$text, "n/a")
+    expect_equal(d$class, "delta-muted")
+  }
+  expect_equal(delta_vs_benchmark(0.1, NA_real_)$text, "n/a")
 })
 
 test_that("rebal_label covers every choice the sidebar offers", {

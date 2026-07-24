@@ -38,8 +38,15 @@ LOSS_COLOR    <- "#d03b3b"  # diverging pole: losses
 # than slots no assignment can both stay fixed per symbol and stay distinct.
 # There is deliberately no filter control that would drop a series from a drawn
 # chart, which is the case where repainting the survivors would mislead.
-entity_colors <- function(bench_sym, syms) {
-  instruments <- unique(c(bench_sym, syms))
+#
+# `drawn` names the instruments that will actually be plotted, and they take
+# slots first. Without that, selection (by weight, in top_holdings) and
+# assignment (by list position) were free to disagree: twenty holdings whose
+# largest positions sat late in the list drew seven lines that were all the
+# same overflow grey. Hue priority is the only thing rank decides here — an
+# instrument's colour still comes from the inputs, never from its own rank.
+entity_colors <- function(bench_sym, syms, drawn = syms) {
+  instruments <- unique(c(bench_sym, drawn, syms))
   slots <- c(SERIES_SLOTS,
              rep(INK_MUTED, max(0, length(instruments) - length(SERIES_SLOTS))))
   setNames(c(PORTFOLIO_INK, slots[seq_along(instruments)]),
@@ -54,6 +61,24 @@ top_holdings <- function(syms, wts, n = length(SERIES_SLOTS) - 1L) {
   if (length(syms) <= n) return(syms)
   syms[sort(order(wts, decreasing = TRUE)[seq_len(n)])]
 }
+
+# Which series get drawn and what colour each entity wears are one decision, so
+# they are resolved together and once. Every output — both charts, the legend
+# and the stats table — reads this same plan; asking the two functions
+# separately is what let the chart and the palette disagree.
+display_plan <- function(bench_sym, syms, wts) {
+  shown <- top_holdings(syms, wts)
+  list(shown = shown, colors = entity_colors(bench_sym, syms, drawn = shown))
+}
+
+# The row label names an entity chosen by the user, so it is escaped before it
+# reaches a table rendered with sanitize.text.function = identity. Nothing
+# hostile survives the Yahoo download today, which is exactly the kind of
+# guarantee that quietly stops being true.
+entity_chip <- function(label, color)
+  sprintf('<span class="entity-chip" style="background:%s"></span>%s',
+          htmltools::htmlEscape(color, attribute = TRUE),
+          htmltools::htmlEscape(label))
 
 # Robust full-tint magnitude for the monthly-returns grid. A single outlier
 # month (a leveraged fund's +40%) would otherwise flatten every other cell to
@@ -78,9 +103,15 @@ return_tint <- function(x, cap = 10) {
 
 # Signed comparison against the benchmark. The arrow duplicates the sign so the
 # outcome is never encoded by colour alone.
+#
+# A non-finite delta is not a loss. isTRUE(NA >= 0) is FALSE, so the unguarded
+# version answered "▼ NA pts" — a confident-looking claim that the portfolio
+# trailed, built out of a missing number.
 delta_vs_benchmark <- function(port, bench) {
   d <- port - bench
-  ahead <- isTRUE(d >= 0)
+  if (!isTRUE(is.finite(d)))
+    return(list(class = "delta-muted", text = "n/a"))
+  ahead <- d >= 0
   list(class = if (ahead) "delta-good" else "delta-bad",
        text  = sprintf("%s%.1f pts", if (ahead) "▲ " else "▼ ",
                        abs(100 * d)))
@@ -96,8 +127,15 @@ parse_weights <- function(text) {
   suppressWarnings(as.numeric(wtxt[nzchar(wtxt)]))
 }
 
+MAX_YEARS <- 30
+
 # Returns a character vector of validation messages, empty when inputs are
 # valid. Mirrors shiny::need semantics: any non-TRUE condition fails.
+#
+# The upper bound on `years` is enforced here as well as on the input control:
+# numericInput's max is a browser hint, and a typed or scripted value sails
+# past it. A missing year reports the lower bound only — two complaints about
+# one empty box reads as two separate problems.
 portfolio_input_errors <- function(syms, wts, bench, years) {
   fail <- function(cond) !isTRUE(cond)
   c(
@@ -109,11 +147,35 @@ portfolio_input_errors <- function(syms, wts, bench, years) {
     if (fail(sum(wts) > 0)) "At least one weight must be positive.",
     if (fail(nzchar(bench))) "Enter a benchmark symbol.",
     if (fail(!grepl("[,[:space:]]", bench))) "Enter a single benchmark symbol.",
-    if (fail(!is.na(years) && years >= 1)) "Years of history must be at least 1."
+    if (fail(!is.na(years) && years >= 1)) "Years of history must be at least 1.",
+    if (fail(is.na(years) || years <= MAX_YEARS))
+      sprintf("Years of history cannot exceed %d.", MAX_YEARS)
   )
 }
 
 normalize_weights <- function(wts) wts / sum(wts)
+
+# Month names are pinned rather than taken from %b, which renders in the
+# session locale: an R process started under a German or French locale served
+# "Mrz 05, 2021" and "Mrz" column headers inside otherwise English chrome. The
+# numeric parts of format() are locale-free, so only the label needs replacing.
+MONTH_ABB <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+month_abb_of <- function(d) MONTH_ABB[as.integer(format(as.Date(d), "%m"))]
+
+fmt_month_year <- function(d) {
+  out <- sprintf("%s %s", month_abb_of(d), format(as.Date(d), "%Y"))
+  out[is.na(as.Date(d))] <- NA_character_
+  out
+}
+
+fmt_month_day_year <- function(d) {
+  out <- sprintf("%s %s, %s", month_abb_of(d),
+                 format(as.Date(d), "%d"), format(as.Date(d), "%Y"))
+  out[is.na(as.Date(d))] <- NA_character_
+  out
+}
 
 REBAL_LABELS <- c(months = "monthly", quarters = "quarterly",
                   years = "yearly", none = "buy & hold, never rebalanced")
@@ -133,6 +195,18 @@ sharpe_verdict <- function(s) {
                    labels = c("poor", "fair", "good", "great"),
                    right = FALSE))
 }
+
+# Sharpe is computed with Rf = 0 — PerformanceAnalytics' default, used by both
+# the value box and the stats table, so the two always agree. The card grades
+# the number in plain English for people who have not met a Sharpe ratio
+# before, and a grade needs its baseline stated: with cash paying anything at
+# all, a zero-Rf figure is return per unit of risk, not *excess* return per
+# unit of risk, and it flatters every portfolio it touches.
+RISK_FREE_RATE <- 0
+
+sharpe_caption <- function(s)
+  sprintf("Return per unit of risk — %s (1+ good, 2+ great), against a %s risk-free rate.",
+          sharpe_verdict(s), fmt_pct(RISK_FREE_RATE))
 
 # Everything downstream of the price download. `prices` is a merged, na.omit'd
 # xts of adjusted prices whose columns are named by symbol; `wts` is already
@@ -173,10 +247,15 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
   )
 }
 
+# `top = 5` is a ceiling, not a quota: table.Drawdowns warns when the series
+# has fewer, and hands back a placeholder row (Depth 0, To = NA) when it has
+# none at all. Rendered verbatim that placeholder claimed an ongoing 0.0%
+# drawdown, so only genuine drawdowns survive here — an empty table is the
+# honest answer for a series that never fell.
 build_drawdown_table <- function(port, scale) {
-  dd <- table.Drawdowns(port, top = 5)
-  fmt_date <- function(d) ifelse(is.na(d), "ongoing",
-                                 format(as.Date(d), "%b %d, %Y"))
+  dd <- suppressWarnings(table.Drawdowns(port, top = 5))
+  dd <- dd[is.finite(dd$Depth) & dd$Depth < 0, , drop = FALSE]
+  fmt_date <- function(d) ifelse(is.na(d), "ongoing", fmt_month_day_year(d))
   df <- data.frame(
     From   = fmt_date(dd$From),
     Trough = fmt_date(dd$Trough),

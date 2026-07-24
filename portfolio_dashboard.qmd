@@ -21,7 +21,7 @@ source("portfolio_core.R")
 textInput("symbols", "Symbols (comma-separated)", value = "VOO, TQQQ, SCHD")
 textInput("weights", "Weights (comma-separated)", value = "40, 30, 30")
 textInput("benchmark", "Benchmark", value = "SPY")
-numericInput("years", "Years of history", value = 5, min = 1, max = 30, step = 1)
+numericInput("years", "Years of history", value = 5, min = 1, max = MAX_YEARS, step = 1)
 selectInput("rebal", "Rebalance",
   choices = c("Monthly" = "months", "Quarterly" = "quarters",
               "Yearly" = "years", "Buy & Hold" = "none"),
@@ -72,7 +72,10 @@ backtest <- reactive({
   prices <- na.omit(prices)
   validate(need(nrow(prices) > 30, "Not enough overlapping history for these symbols."))
 
-  c(list(p = p), compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal))
+  # Selection and colour are settled once, here, so every card below is drawing
+  # from the same plan rather than each re-deriving its own.
+  c(list(p = p, plan = display_plan(p$bench, p$syms, p$wts)),
+    compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal))
 })
 
 vb_note <- function(...) tags$span(class = "vb-note", ...)
@@ -102,11 +105,9 @@ output$vb_cagr <- renderUI({
 
 output$vb_sharpe <- renderUI({
   bt <- backtest()
-  s <- SharpeRatio.annualized(bt$port, scale = bt$scale, geometric = TRUE)[1]
-  verdict <- sharpe_verdict(s)
-  tagList(sprintf("%.2f", s),
-    vb_note(sprintf("Reward per unit of risk — %s (1+ good, 2+ great)",
-                    verdict)))
+  s <- SharpeRatio.annualized(bt$port, scale = bt$scale,
+                              Rf = RISK_FREE_RATE, geometric = TRUE)[1]
+  tagList(sprintf("%.2f", s), vb_note(sharpe_caption(s)))
 })
 
 output$vb_maxdd <- renderUI({
@@ -120,7 +121,7 @@ output$vb_maxdd <- renderUI({
 
 output$vb_period <- renderText({
   bt <- backtest()
-  sprintf("%s – %s", format(start(bt$port), "%b %Y"), format(end(bt$port), "%b %Y"))
+  sprintf("%s – %s", fmt_month_year(start(bt$port)), fmt_month_year(end(bt$port)))
 })
 
 output$perf_caption <- renderUI({
@@ -135,7 +136,7 @@ output$perf_caption <- renderUI({
 # rather than a second copy of the header.
 output$perf_chart <- renderPlot({
   bt <- backtest()
-  cols <- entity_colors(bt$p$bench, bt$p$syms)
+  cols <- bt$plan$colors
   charts.PerformanceSummary(bt$combined,
     wealth.index = TRUE, main = "", legend.loc = "topleft",
     colorset = unname(cols[colnames(bt$combined)]),
@@ -146,7 +147,7 @@ output$perf_chart <- renderPlot({
 
 output$fund_caption <- renderUI({
   bt <- backtest()
-  shown <- top_holdings(bt$p$syms, bt$p$wts)
+  shown <- bt$plan$shown
   chart_caption(if (length(shown) < length(bt$p$syms))
     sprintf("$1 in each holding on its own. Showing the %d largest of %d positions — the palette has %d distinct colours.",
             length(shown), length(bt$p$syms), length(SERIES_SLOTS))
@@ -155,8 +156,8 @@ output$fund_caption <- renderUI({
 
 output$fund_chart <- renderPlot({
   bt <- backtest()
-  shown <- top_holdings(bt$p$syms, bt$p$wts)
-  cols <- entity_colors(bt$p$bench, bt$p$syms)
+  shown <- bt$plan$shown
+  cols <- bt$plan$colors
   chart.CumReturns(bt$returns[, shown, drop = FALSE],
     wealth.index = TRUE, legend.loc = "topleft", main = "",
     colorset = unname(cols[shown]),
@@ -171,11 +172,8 @@ output$fund_chart <- renderPlot({
 output$stats_table <- renderTable({
   bt <- backtest()
   tbl <- build_stats_table(bt$port, bt$returns, bt$p$bench, bt$p$syms, bt$scale)
-  cols <- entity_colors(bt$p$bench, bt$p$syms)
-  cbind(
-    " " = sprintf('<span class="entity-chip" style="background:%s"></span>%s',
-                  cols[rownames(tbl)], rownames(tbl)),
-    tbl)
+  cols <- bt$plan$colors
+  cbind(" " = entity_chip(rownames(tbl), cols[rownames(tbl)]), tbl)
 }, rownames = FALSE, sanitize.text.function = identity)
 
 # The calendar is polarity data — gains against losses — so it gets a diverging
@@ -195,9 +193,11 @@ output$calendar_table <- renderUI({
             sprintf("%.1f", v))
   }
 
+  # Month headers come from MONTH_ABB, not from table.CalendarReturns' own
+  # colnames — those are built with %b and arrive localized ("Mrz", "Okt").
   tags$table(class = "table calendar",
     tags$thead(tags$tr(tags$th(""),
-      lapply(c(colnames(cal)[seq_len(last - 1)], "Year"), tags$th))),
+      lapply(c(MONTH_ABB[seq_len(last - 1)], "Year"), tags$th))),
     tags$tbody(lapply(seq_len(nrow(cal)), function(i)
       tags$tr(tags$th(scope = "row", rownames(cal)[i]),
         lapply(seq_len(last), function(j)
@@ -291,7 +291,7 @@ tableOutput("stats_table")
 
 ```{r}
 #| title: "Monthly Returns (%)"
-tableOutput("calendar_table")
+uiOutput("calendar_table")
 ```
 
 ### Row

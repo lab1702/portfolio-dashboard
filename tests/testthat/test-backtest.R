@@ -110,11 +110,23 @@ test_that("drawdown table formats depth, dates, and recovery", {
   r <- xts::xts(pv[-1] / pv[-length(pv)] - 1, order.by = dates[-1])
   colnames(r) <- "Portfolio"
 
-  dd <- suppressWarnings(build_drawdown_table(r, scale = 251))
+  dd <- build_drawdown_table(r, scale = 251)
   expect_equal(names(dd), c("From", "Trough", "To", "Depth", "Trading Days"))
   expect_equal(dd$Depth[1], "-18.2%")  # 90 / 110 - 1
   expect_false(any(dd$To == "ongoing"))
   expect_true(grepl("^[A-Z][a-z]{2} \\d{2}, \\d{4}$", dd$From[1]))
+})
+
+test_that("a series that never draws down yields no rows at all", {
+  # table.Drawdowns reports a single Depth=0, To=NA placeholder here, which
+  # rendered as a real "ongoing 0.0%" drawdown in the card.
+  dates <- seq(as.Date("2021-01-01"), by = "day", length.out = 40)
+  r <- xts::xts(rep(0.001, 40), order.by = dates)
+  colnames(r) <- "Portfolio"
+
+  dd <- build_drawdown_table(r, scale = 365.25)
+  expect_equal(nrow(dd), 0)
+  expect_equal(names(dd), c("From", "Trough", "To", "Depth", "Days"))
 })
 
 test_that("unrecovered drawdowns show 'ongoing' and crypto scale uses Days", {
@@ -123,7 +135,23 @@ test_that("unrecovered drawdowns show 'ongoing' and crypto scale uses Days", {
   r <- xts::xts(pv[-1] / pv[-length(pv)] - 1, order.by = dates[-1])
   colnames(r) <- "Portfolio"
 
-  dd <- suppressWarnings(build_drawdown_table(r, scale = 365.4))
+  dd <- build_drawdown_table(r, scale = 365.4)
   expect_equal(names(dd)[5], "Days")
   expect_true("ongoing" %in% dd$To)
+})
+
+test_that("drawdown dates stay English regardless of the session locale", {
+  old <- Sys.getlocale("LC_TIME")
+  on.exit(Sys.setlocale("LC_TIME", old), add = TRUE)
+  got <- suppressWarnings(Sys.setlocale("LC_TIME", "German_Germany.1252"))
+  skip_if(!nzchar(got), "German locale not available on this machine")
+
+  dates <- weekday_dates("2021-03-01", 40)
+  pv <- c(100, 110, 99, 90, 111, seq(112, length.out = 35, by = 1))
+  r <- xts::xts(pv[-1] / pv[-length(pv)] - 1, order.by = dates[-1])
+  colnames(r) <- "Portfolio"
+
+  dd <- build_drawdown_table(r, scale = 251)
+  expect_false(any(grepl("Mrz|Mai|Okt|Dez", unlist(dd[, 1:3]))))
+  expect_true(all(grepl("^(Mar|ongoing)", c(dd$From, dd$Trough, dd$To))))
 })

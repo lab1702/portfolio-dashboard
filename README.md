@@ -18,6 +18,10 @@ Yahoo Finance.
   benchmark), CAGR with a benchmark comparison, Sharpe ratio with a
   plain-English verdict, max drawdown translated into dollars, all with
   short interpretive captions.
+- **Stated assumptions** — the Sharpe ratio is computed against a 0% risk-free
+  rate, which the card says on its face. It is return per unit of risk rather
+  than *excess* return per unit of risk, so treat the "1+ good, 2+ great"
+  bands as generous whenever cash is paying something.
 - **Charts and tables** — performance vs benchmark, growth of $1 per holding,
   annualized key statistics, monthly-returns calendar, worst-drawdowns table.
 - **Calendar-true annualization** — CAGR/Sharpe/volatility use a continuous

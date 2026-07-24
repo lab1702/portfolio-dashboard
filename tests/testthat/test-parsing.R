@@ -41,6 +41,15 @@ test_that("each validation rule fires with its exact message", {
               e("VOO", 1, "SPY", 0))
 })
 
+test_that("years of history is bounded at both ends", {
+  e <- portfolio_input_errors
+  expect_length(e("VOO", 1, "SPY", MAX_YEARS), 0)
+  expect_true(sprintf("Years of history cannot exceed %d.", MAX_YEARS) %in%
+              e("VOO", 1, "SPY", MAX_YEARS + 1))
+  # a missing value reports the lower bound only, not both bounds at once
+  expect_equal(sum(grepl("^Years of history", e("VOO", 1, "SPY", NA))), 1)
+})
+
 test_that("non-finite weights are rejected (Inf regression)", {
   e <- portfolio_input_errors
   expect_true("Weights must be numeric." %in% e(c("A", "B"), c(Inf, 1), "SPY", 5))

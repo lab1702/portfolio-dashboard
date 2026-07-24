@@ -210,6 +210,10 @@ $input-focus-border-color: $viz-series-1;
 .delta-good    { color: $viz-good; font-weight: 600; }
 .delta-bad     { color: $viz-critical; font-weight: 600; }
 
+// A comparison that could not be computed is neither a win nor a loss, so it
+// takes the muted ink rather than borrowing either pole's colour.
+.delta-muted   { color: $viz-muted; font-weight: 600; }
+
 // Chart parameters live under the plot as a caption. They are content the
 // header can't hold, not a restatement of the header.
 .chart-caption {
