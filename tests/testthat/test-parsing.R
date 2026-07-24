@@ -59,6 +59,19 @@ test_that("non-finite weights are rejected (Inf regression)", {
               e(c("A", "B"), parse_weights("1e999, 1"), "SPY", 5))
 })
 
+test_that("the symbol list is bounded at both ends", {
+  e <- portfolio_input_errors
+  ok <- sprintf("S%03d", seq_len(MAX_SYMBOLS))
+  expect_length(e(ok, rep(1, MAX_SYMBOLS), "SPY", 5), 0)
+
+  # the symbol list is the only input that reaches the network: one sequential
+  # download each, so an unbounded list froze the dashboard rather than failing
+  too_many <- sprintf("S%03d", seq_len(MAX_SYMBOLS + 1))
+  expect_true(sprintf("Enter at most %d symbols.", MAX_SYMBOLS) %in%
+              e(too_many, rep(1, MAX_SYMBOLS + 1), "SPY", 5))
+  expect_length(e(sprintf("S%03d", 1:500), rep(1, 500), "SPY", 5) , 1)
+})
+
 test_that("weights normalize from any scale", {
   expect_equal(normalize_weights(c(1, 2)), c(1 / 3, 2 / 3))
   expect_equal(normalize_weights(c(40, 30, 30)), c(0.4, 0.3, 0.3))

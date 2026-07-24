@@ -104,6 +104,69 @@ test_that("a 100% single-holding portfolio matches that holding's stats", {
   expect_equal(st["Portfolio", "Max Drawdown"], st["A", "Max Drawdown"])
 })
 
+test_that("weights follow the symbol list, not the column order of the prices", {
+  # Return.portfolio matches weights positionally, so correctness rests entirely
+  # on returns[, syms] reordering the columns first. Every other fixture here
+  # has column order == symbol order, which would hide a regression that applied
+  # weights in column order — the same coincidence that hid the palette
+  # collision for a round. These two orders deliberately disagree.
+  set.seed(5)
+  dates <- weekday_dates("2020-01-06", 400)
+  strong <- 100 * cumprod(c(1, 1 + rnorm(399,  12e-4, 0.010)))
+  weak   <- 100 * cumprod(c(1, 1 + rnorm(399,  -2e-4, 0.010)))
+  neut   <- 100 * cumprod(c(1, 1 + rnorm(399,   3e-4, 0.008)))
+  prices <- make_prices(dates, BEN = neut, B = weak, A = strong)
+  expect_equal(colnames(prices), c("BEN", "B", "A"))   # not syms order
+
+  # All-or-nothing weights make this exact rather than approximate: 100% of A
+  # must reproduce A's return series to the last bit. expect_lt/expect_gt on a
+  # scalar gap keeps it that way — this suite runs under testthat edition 2,
+  # where expect_equal(tolerance =) is looser than all.equal and a near-miss
+  # can slip through.
+  gap <- function(x, y) max(abs(as.numeric(x) - as.numeric(y)))
+
+  bt <- compute_backtest(prices, c("A", "B"), c(1, 0), "BEN", "none")
+  expect_lt(gap(bt$port, bt$returns[, "A"]), 1e-12)   # tracks A, by symbol order
+  expect_gt(gap(bt$port, bt$returns[, "B"]), 1e-6)    # not B, the first column
+
+  # the mirror image: swapping the weights must swap which holding it tracks
+  flipped <- compute_backtest(prices, c("A", "B"), c(0, 1), "BEN", "none")
+  expect_lt(gap(flipped$port, bt$returns[, "B"]), 1e-12)
+  expect_gt(gap(flipped$port, bt$returns[, "A"]), 1e-6)
+})
+
+test_that("every value box agrees with its own cell in the stats table", {
+  # Two routes to the same three numbers: the boxes call ann_*(), the table
+  # goes through table.AnnualizedReturns and a matrix-coerced apply(). That
+  # they agree was asserted in a comment and nowhere else.
+  set.seed(101)
+  dates <- weekday_dates("2019-01-07", 700)
+  pA <- 100 * cumprod(c(1, 1 + rnorm(699, 6e-4, 0.013)))
+  pB <- 80  * cumprod(c(1, 1 + rnorm(699, 4e-4, 0.009)))
+  pS <- 300 * cumprod(c(1, 1 + rnorm(699, 4.5e-4, 0.010)))
+  prices <- make_prices(dates, A = pA, B = pB, SPY = pS)
+
+  bt <- compute_backtest(prices, c("A", "B"), c(0.6, 0.4), "SPY", "months")
+  st <- build_stats_table(bt$port, bt$returns, "SPY", c("A", "B"), bt$scale)
+
+  expect_equal(fmt_pct(ann_return(bt$port, bt$scale)),
+               st["Portfolio", "Return (ann.)"])
+  expect_equal(fmt_sharpe(ann_sharpe(bt$port, bt$scale)),
+               st["Portfolio", "Sharpe"])
+  expect_equal(fmt_pct(-ann_maxdd(bt$port)),
+               st["Portfolio", "Max Drawdown"])
+
+  # the benchmark value box reads the same series the table's SPY row does
+  expect_equal(fmt_pct(ann_return(bt$bench, bt$scale)),
+               st["SPY", "Return (ann.)"])
+
+  # and the growth box compounds to what the CAGR box claims
+  span <- as.numeric(difftime(end(prices), start(prices), units = "days"))
+  expect_equal(fmt_dollar(grew_to(bt$port)),
+               fmt_dollar(START_CAPITAL *
+                          (1 + ann_return(bt$port, bt$scale))^(span / 365.25)))
+})
+
 test_that("every rebalance frequency the sidebar offers runs end-to-end", {
   # "months" and "none" were the only two exercised here; a bad choice value in
   # the other two would have surfaced in the browser, not in this suite.

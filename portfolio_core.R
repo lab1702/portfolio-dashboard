@@ -132,6 +132,13 @@ parse_weights <- function(text) {
 
 MAX_YEARS <- 30
 
+# The symbol list is the only input that reaches the network, and it was the
+# only one with no ceiling: each symbol costs one sequential Yahoo download on
+# Shiny's single thread, so a pasted list of several hundred froze the whole
+# dashboard for minutes with nothing on screen to explain it. Twenty-five is
+# well past any portfolio this tool is meant for and still bounds the wait.
+MAX_SYMBOLS <- 25
+
 # Returns a character vector of validation messages, empty when inputs are
 # valid. Mirrors shiny::need semantics: any non-TRUE condition fails.
 #
@@ -143,6 +150,8 @@ portfolio_input_errors <- function(syms, wts, bench, years) {
   fail <- function(cond) !isTRUE(cond)
   c(
     if (fail(length(syms) >= 1)) "Enter at least one symbol.",
+    if (fail(length(syms) <= MAX_SYMBOLS))
+      sprintf("Enter at most %d symbols.", MAX_SYMBOLS),
     if (fail(!anyDuplicated(syms))) "Remove duplicate symbols.",
     if (fail(length(syms) == length(wts))) "Number of symbols and weights must match.",
     if (fail(all(is.finite(wts)))) "Weights must be numeric.",
@@ -230,6 +239,21 @@ sharpe_verdict <- function(s) {
 # all, a zero-Rf figure is return per unit of risk, not *excess* return per
 # unit of risk, and it flatters every portfolio it touches.
 RISK_FREE_RATE <- 0
+
+# The value boxes and the stats table are two routes to the same three numbers.
+# The boxes call these; the table goes through table.AnnualizedReturns and a
+# matrix-coerced apply(). Nothing forced the routes to agree — the guarantee
+# lived in the comment above and nowhere else. Computing the boxes' figures
+# here puts both routes inside the test suite's reach, and a test now holds
+# each box equal to its own cell in the table.
+ann_return <- function(r, scale)
+  as.numeric(Return.annualized(r, scale = scale)[1])
+
+ann_sharpe <- function(r, scale)
+  as.numeric(SharpeRatio.annualized(r, scale = scale, Rf = RISK_FREE_RATE,
+                                    geometric = TRUE)[1])
+
+ann_maxdd <- function(r) as.numeric(maxDrawdown(r))
 
 sharpe_caption <- function(s) {
   if (!isTRUE(sharpe_measurable(s)))

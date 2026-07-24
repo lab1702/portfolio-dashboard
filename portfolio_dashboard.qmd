@@ -97,8 +97,8 @@ output$vb_bench_growth <- renderText({
 
 output$vb_cagr <- renderUI({
   bt <- backtest()
-  cagr  <- Return.annualized(bt$port, scale = bt$scale)[1]
-  bench <- Return.annualized(bt$bench, scale = bt$scale)[1]
+  cagr  <- ann_return(bt$port, bt$scale)
+  bench <- ann_return(bt$bench, bt$scale)
   d <- delta_vs_benchmark(cagr, bench)
   tagList(fmt_pct(cagr),
     vb_note("Avg. yearly growth — ",
@@ -108,14 +108,13 @@ output$vb_cagr <- renderUI({
 
 output$vb_sharpe <- renderUI({
   bt <- backtest()
-  s <- SharpeRatio.annualized(bt$port, scale = bt$scale,
-                              Rf = RISK_FREE_RATE, geometric = TRUE)[1]
+  s <- ann_sharpe(bt$port, bt$scale)
   tagList(fmt_sharpe(s), vb_note(sharpe_caption(s)))
 })
 
 output$vb_maxdd <- renderUI({
   bt <- backtest()
-  dd <- maxDrawdown(bt$port)
+  dd <- ann_maxdd(bt$port)
   tagList(fmt_pct(-dd),
     vb_note(sprintf("Biggest peak-to-trough loss — %s at the peak fell to %s",
                     fmt_dollar(START_CAPITAL),
