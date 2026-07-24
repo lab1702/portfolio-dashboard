@@ -43,7 +43,8 @@ frequency in the sidebar, then click **Run Backtest**.
 | Path | Purpose |
 |------|---------|
 | `portfolio_dashboard.qmd` | Dashboard layout and the thin Shiny layer |
-| `portfolio_core.R` | Pure logic: parsing, validation, backtest math, table builders |
+| `portfolio_core.R` | Pure logic: parsing, validation, backtest math, table builders, colour system |
+| `theme.scss` | Bootstrap/SCSS theme: surfaces, typography, value boxes, tables |
 | `tests/` | testthat suite covering the core logic |
 
 ## Tests

@@ -4,6 +4,88 @@
 
 START_CAPITAL <- 10000
 
+# ── Visual system ────────────────────────────────────────────────────────────
+# One entity, one colour, everywhere it appears: charts, legends and the stats
+# table all read from entity_colors(), so a colour follows the entity and never
+# its rank — changing the symbol list never repaints the survivors.
+#
+# The portfolio is the subject of the dashboard rather than one instrument among
+# many, so it wears primary ink at the heaviest weight instead of a hue. The
+# instruments take the categorical slots in order.
+
+PORTFOLIO_INK <- "#0b0b0b"
+
+# Validated categorical order: worst adjacent pair is CVD dE 9.1 and
+# normal-vision dE 19.6 on the #fcfcfb card surface. The *ordering* is the
+# colourblind-safety mechanism, not decoration — re-validate before reordering
+# or extending it.
+SERIES_SLOTS <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+                  "#e87ba4", "#008300", "#4a3aa7", "#e34948")
+
+INK_MUTED     <- "#898781"  # axis labels, captions
+GRID_COLOR    <- "#e1e0d9"  # hairline gridlines
+SURFACE_COLOR <- "#fcfcfb"  # card surface the plots sit on
+GAIN_COLOR    <- "#2a78d6"  # diverging pole: gains
+LOSS_COLOR    <- "#d03b3b"  # diverging pole: losses
+
+# Instruments past the eighth slot fall back to muted grey rather than a cycled
+# hue: a recycled categorical colour is indistinguishable from the entity it
+# repeats, which is worse than admitting the series is unlabelled.
+#
+# Colours are keyed to an instrument's position in the symbol list, so the same
+# inputs always produce the same chart. That is as stable as eight slots allow:
+# editing the symbol list re-runs the whole backtest, and with more instruments
+# than slots no assignment can both stay fixed per symbol and stay distinct.
+# There is deliberately no filter control that would drop a series from a drawn
+# chart, which is the case where repainting the survivors would mislead.
+entity_colors <- function(bench_sym, syms) {
+  instruments <- unique(c(bench_sym, syms))
+  slots <- c(SERIES_SLOTS,
+             rep(INK_MUTED, max(0, length(instruments) - length(SERIES_SLOTS))))
+  setNames(c(PORTFOLIO_INK, slots[seq_along(instruments)]),
+           c("Portfolio", instruments))
+}
+
+# The per-holding chart can only draw as many holdings as there are distinct
+# slots left once the benchmark has taken slot 1. Past that it shows the largest
+# positions — in input order, so colours stay put — and the caller says so
+# rather than silently dropping the tail.
+top_holdings <- function(syms, wts, n = length(SERIES_SLOTS) - 1L) {
+  if (length(syms) <= n) return(syms)
+  syms[sort(order(wts, decreasing = TRUE)[seq_len(n)])]
+}
+
+# Robust full-tint magnitude for the monthly-returns grid. A single outlier
+# month (a leveraged fund's +40%) would otherwise flatten every other cell to
+# near-neutral, so the scale tops out at the 90th percentile of |return|.
+tint_cap <- function(values, floor_pct = 2) {
+  v <- abs(values[is.finite(values)])
+  if (!length(v)) return(floor_pct)
+  max(floor_pct, as.numeric(stats::quantile(v, 0.9)))
+}
+
+# Diverging cell tint, neutral at zero. Returns a background pale enough to keep
+# primary ink readable on top — the printed sign, not the tint, is what carries
+# the polarity; the colour only reinforces it.
+return_tint <- function(x, cap = 10) {
+  if (!is.finite(x) || x == 0) return(SURFACE_COLOR)
+  weight <- 0.12 + 0.48 * min(abs(x) / cap, 1)
+  pole <- grDevices::col2rgb(if (x > 0) GAIN_COLOR else LOSS_COLOR)[, 1]
+  base <- grDevices::col2rgb(SURFACE_COLOR)[, 1]
+  mix <- round((1 - weight) * base + weight * pole)
+  grDevices::rgb(mix[1], mix[2], mix[3], maxColorValue = 255)
+}
+
+# Signed comparison against the benchmark. The arrow duplicates the sign so the
+# outcome is never encoded by colour alone.
+delta_vs_benchmark <- function(port, bench) {
+  d <- port - bench
+  ahead <- isTRUE(d >= 0)
+  list(class = if (ahead) "delta-good" else "delta-bad",
+       text  = sprintf("%s%.1f pts", if (ahead) "▲ " else "▼ ",
+                       abs(100 * d)))
+}
+
 parse_symbols <- function(text) {
   syms <- toupper(trimws(strsplit(text, ",")[[1]]))
   syms[nzchar(syms)]
@@ -32,6 +114,11 @@ portfolio_input_errors <- function(syms, wts, bench, years) {
 }
 
 normalize_weights <- function(wts) wts / sum(wts)
+
+REBAL_LABELS <- c(months = "monthly", quarters = "quarterly",
+                  years = "yearly", none = "buy & hold, never rebalanced")
+
+rebal_label <- function(rebal) unname(REBAL_LABELS[rebal])
 
 fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
 

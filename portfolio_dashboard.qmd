@@ -1,6 +1,8 @@
 ---
 title: "Portfolio Backtest Dashboard"
-format: dashboard
+format:
+  dashboard:
+    theme: [default, theme.scss]
 server: shiny
 ---
 
@@ -73,11 +75,9 @@ backtest <- reactive({
   c(list(p = p), compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal))
 })
 
-vb_note <- function(txt) {
-  tags$span(txt, style = paste(
-    "display: block; font-size: 0.72rem; font-weight: normal;",
-    "line-height: 1.25; margin-top: 0.35rem; opacity: 0.9;"))
-}
+vb_note <- function(...) tags$span(class = "vb-note", ...)
+
+chart_caption <- function(txt) tags$p(class = "chart-caption", txt)
 
 output$vb_growth <- renderText({
   bt <- backtest()
@@ -93,9 +93,11 @@ output$vb_cagr <- renderUI({
   bt <- backtest()
   cagr  <- Return.annualized(bt$port, scale = bt$scale)[1]
   bench <- Return.annualized(bt$bench, scale = bt$scale)[1]
+  d <- delta_vs_benchmark(cagr, bench)
   tagList(fmt_pct(cagr),
-    vb_note(sprintf("Avg. yearly growth — %s did %s",
-                    bt$p$bench, fmt_pct(bench))))
+    vb_note("Avg. yearly growth — ",
+            tags$span(class = d$class, d$text),
+            sprintf(" vs %s at %s", bt$p$bench, fmt_pct(bench))))
 })
 
 output$vb_sharpe <- renderUI({
@@ -121,30 +123,86 @@ output$vb_period <- renderText({
   sprintf("%s – %s", format(start(bt$port), "%b %Y"), format(end(bt$port), "%b %Y"))
 })
 
+output$perf_caption <- renderUI({
+  bt <- backtest()
+  chart_caption(sprintf("%s · rebalanced %s · benchmark %s",
+    paste0(round(bt$p$wts * 100, 1), "% ", bt$p$syms, collapse = " / "),
+    rebal_label(bt$p$rebal), bt$p$bench))
+})
+
+# The card header already names each chart, so the plots draw no title of their
+# own — the caption below carries the parameters instead, which is content
+# rather than a second copy of the header.
 output$perf_chart <- renderPlot({
   bt <- backtest()
+  cols <- entity_colors(bt$p$bench, bt$p$syms)
   charts.PerformanceSummary(bt$combined,
-    main = sprintf("Portfolio (%s) vs %s",
-                   paste0(round(bt$p$wts * 100, 1), "% ", bt$p$syms, collapse = " / "),
-                   bt$p$bench))
+    wealth.index = TRUE, main = "", legend.loc = "topleft",
+    colorset = unname(cols[colnames(bt$combined)]),
+    lwd = 2, element.color = GRID_COLOR,
+    cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
+    main.timespan = FALSE)   # the Period value box already states the window
+}, bg = "transparent")
+
+output$fund_caption <- renderUI({
+  bt <- backtest()
+  shown <- top_holdings(bt$p$syms, bt$p$wts)
+  chart_caption(if (length(shown) < length(bt$p$syms))
+    sprintf("$1 in each holding on its own. Showing the %d largest of %d positions — the palette has %d distinct colours.",
+            length(shown), length(bt$p$syms), length(SERIES_SLOTS))
+  else "$1 in each holding on its own, dividends reinvested.")
 })
 
 output$fund_chart <- renderPlot({
   bt <- backtest()
-  chart.CumReturns(bt$returns[, bt$p$syms, drop = FALSE],
-    wealth.index = TRUE, legend.loc = "topleft",
-    main = "Growth of $1 by Holding")
-})
+  shown <- top_holdings(bt$p$syms, bt$p$wts)
+  cols <- entity_colors(bt$p$bench, bt$p$syms)
+  chart.CumReturns(bt$returns[, shown, drop = FALSE],
+    wealth.index = TRUE, legend.loc = "topleft", main = "",
+    colorset = unname(cols[shown]),
+    lwd = 2, element.color = GRID_COLOR,
+    cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
+    main.timespan = FALSE)
+}, bg = "transparent")
 
+# A colour chip per row ties each table row to its line in the charts, so the
+# legend and the table are the same key. The name stays in text ink — the chip
+# beside it carries the identity.
 output$stats_table <- renderTable({
   bt <- backtest()
-  build_stats_table(bt$port, bt$returns, bt$p$bench, bt$p$syms, bt$scale)
-}, rownames = TRUE)
+  tbl <- build_stats_table(bt$port, bt$returns, bt$p$bench, bt$p$syms, bt$scale)
+  cols <- entity_colors(bt$p$bench, bt$p$syms)
+  cbind(
+    " " = sprintf('<span class="entity-chip" style="background:%s"></span>%s',
+                  cols[rownames(tbl)], rownames(tbl)),
+    tbl)
+}, rownames = FALSE, sanitize.text.function = identity)
 
-output$calendar_table <- renderTable({
+# The calendar is polarity data — gains against losses — so it gets a diverging
+# tint (blue ↔ red, neutral at zero) instead of a uniform wall of numerals. The
+# sign is always printed, so the colour reinforces and never carries alone.
+output$calendar_table <- renderUI({
   bt <- backtest()
-  table.CalendarReturns(bt$port)
-}, rownames = TRUE, digits = 1, na = "")
+  cal <- table.CalendarReturns(bt$port)
+  last <- ncol(cal)                       # annual total, named after the series
+  month_cap <- tint_cap(unlist(cal[, seq_len(last - 1)]))
+  year_cap  <- tint_cap(cal[[last]])
+
+  cell <- function(v, cap, total) {
+    if (is.na(v)) return(tags$td(class = "cal-cell", ""))
+    tags$td(class = if (total) "cal-cell cal-total" else "cal-cell",
+            style = paste0("background:", return_tint(v, cap)),
+            sprintf("%.1f", v))
+  }
+
+  tags$table(class = "table calendar",
+    tags$thead(tags$tr(tags$th(""),
+      lapply(c(colnames(cal)[seq_len(last - 1)], "Year"), tags$th))),
+    tags$tbody(lapply(seq_len(nrow(cal)), function(i)
+      tags$tr(tags$th(scope = "row", rownames(cal)[i]),
+        lapply(seq_len(last), function(j)
+          cell(cal[i, j], if (j == last) year_cap else month_cap, j == last))))))
+})
 
 output$dd_table <- renderTable({
   bt <- backtest()
@@ -174,7 +232,7 @@ textOutput("vb_bench_growth")
 #| content: valuebox
 #| title: "CAGR"
 #| icon: graph-up-arrow
-#| color: success
+#| color: light
 uiOutput("vb_cagr")
 ```
 
@@ -182,7 +240,7 @@ uiOutput("vb_cagr")
 #| content: valuebox
 #| title: "Sharpe"
 #| icon: speedometer2
-#| color: info
+#| color: light
 uiOutput("vb_sharpe")
 ```
 
@@ -190,7 +248,7 @@ uiOutput("vb_sharpe")
 #| content: valuebox
 #| title: "Max Drawdown"
 #| icon: graph-down-arrow
-#| color: warning
+#| color: light
 uiOutput("vb_maxdd")
 ```
 
@@ -198,7 +256,7 @@ uiOutput("vb_maxdd")
 #| content: valuebox
 #| title: "Period"
 #| icon: calendar3
-#| color: secondary
+#| color: light
 textOutput("vb_period")
 ```
 
@@ -209,6 +267,7 @@ textOutput("vb_period")
 ```{r}
 #| title: "Performance vs Benchmark"
 plotOutput("perf_chart")
+uiOutput("perf_caption")
 ```
 
 ### Row
@@ -216,6 +275,7 @@ plotOutput("perf_chart")
 ```{r}
 #| title: "Per-Holding Growth"
 plotOutput("fund_chart")
+uiOutput("fund_caption")
 ```
 
 ## Column {width=40%}

@@ -1,0 +1,290 @@
+/*-- scss:defaults --*/
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Portfolio dashboard theme.
+//
+// The colour system has exactly two jobs:
+//   · chrome — quiet, near-neutral surfaces and ink, so nothing competes with
+//     the data;
+//   · data — one validated categorical palette, shared by the charts, the
+//     tables and the value boxes, defined once in portfolio_core.R and mirrored
+//     in the $viz-* variables below.
+//
+// Series hues are the validated categorical order (adjacent-pair CVD ΔE ≥ 8,
+// normal-vision ΔE ≥ 15 on this surface). Do not add a ninth hue or reorder
+// them without re-validating: the ordering is the colourblind-safety
+// mechanism, not decoration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+$font-family-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto,
+  "Helvetica Neue", Arial, sans-serif !default;
+
+// Chrome
+$viz-surface:   #fcfcfb; // card surface
+$viz-plane:     #f9f9f7; // page plane behind the cards
+$viz-ink:       #0b0b0b; // primary ink
+$viz-ink-2:     #52514e; // secondary ink
+$viz-muted:     #898781; // axis labels, captions
+$viz-grid:      #e1e0d9; // hairline gridline
+$viz-rule:      #c3c2b7; // baseline / axis
+$viz-hairline:  rgba(11, 11, 11, 0.10);
+
+// Data — categorical slot 1 doubles as the UI accent
+$viz-series-1:  #2a78d6;
+
+// Status (reserved: never used as a series colour)
+$viz-good:      #006300;
+$viz-critical:  #d03b3b;
+
+$primary:       $viz-series-1;
+$secondary:     $viz-ink-2;
+$body-bg:       $viz-plane;
+$body-color:    $viz-ink;
+$link-color:    $viz-series-1;
+$border-color:  $viz-hairline;
+
+$card-bg:                 $viz-surface;
+$card-border-color:       $viz-hairline;
+$card-border-radius:      0.5rem;
+$card-cap-bg:             $viz-surface;
+$card-cap-padding-y:      0.6rem;
+$card-box-shadow:         none;
+
+$navbar-bg:               #1a1a19;
+$navbar-fg:               #ffffff;
+
+$table-border-color:      $viz-grid;
+$table-cell-padding-y:    0.35rem;
+$table-cell-padding-x:    0.6rem;
+
+$input-border-color:      $viz-rule;
+$input-border-radius:     0.375rem;
+$input-focus-border-color: $viz-series-1;
+
+/*-- scss:rules --*/
+
+// ── Chrome ───────────────────────────────────────────────────────────────────
+
+.navbar {
+  border-bottom: none;
+  .navbar-brand,
+  .navbar-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+}
+
+.card {
+  box-shadow: none;
+}
+
+// Card titles are labels, not headlines — they name the panel and then get out
+// of the way. The data inside is what should read first.
+.card > .card-header,
+.card-header .card-title {
+  background-color: $viz-surface;
+  border-bottom: 1px solid $viz-hairline;
+  color: $viz-ink-2;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+// Tables and wide plots get their own scroll rather than being silently
+// clipped by the card. Truncated content reads as complete content.
+.card-body {
+  overflow: auto;
+}
+
+.sidebar {
+  background-color: $viz-surface;
+  border-right: 1px solid $viz-hairline;
+
+  .form-label,
+  label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $viz-ink-2;
+    margin-bottom: 0.2rem;
+  }
+
+  .form-control,
+  .form-select {
+    font-size: 0.875rem;
+  }
+
+  // Sidebar prose is help text: quiet, and clearly not a control.
+  p {
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: $viz-muted;
+  }
+
+  .btn-primary {
+    width: 100%;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}
+
+// ── Value boxes ──────────────────────────────────────────────────────────────
+//
+// One filled card carries the headline number; the rest are quiet surfaces.
+// Six saturated blocks all shouted at once, so none of them landed — and the
+// loudest slots (cyan, amber) were spent on the least important figures.
+// Hierarchy here comes from type size and one fill, not from six hues.
+
+.bslib-value-box {
+  border: 1px solid $viz-hairline;
+  box-shadow: none;
+
+  .value-box-area {
+    padding: 0.8rem 1rem;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .value-box-title {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.72;
+    margin-bottom: 0.25rem;
+  }
+
+  // Proportional figures: tabular-nums makes a large standalone number look
+  // gappy. Tabular is for columns (see the tables below), not hero figures.
+  .value-box-value {
+    font-size: 1.65rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: proportional-nums;
+  }
+
+  // The icon was out-scaling the number it decorated. It is a marker now.
+  .value-box-showcase {
+    padding: 0 0 0 0.9rem;
+    max-width: 3.2rem;
+    flex-grow: 0;
+
+    .bi {
+      font-size: 1.35rem;
+      opacity: 0.4;
+    }
+  }
+}
+
+// Quiet cards
+.bslib-value-box.bg-light {
+  background-color: $viz-surface !important;
+  color: $viz-ink !important;
+}
+
+// The one filled card: growth of $10,000 is the dashboard's headline.
+.bslib-value-box.bg-primary {
+  border-color: transparent;
+
+  .value-box-showcase .bi { opacity: 0.55; }
+}
+
+// The caption under each value explains the metric in plain English — it is
+// support, so it never competes with the figure above it.
+.vb-note {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.3;
+  margin-top: 0.35rem;
+  opacity: 0.78;
+  font-variant-numeric: proportional-nums;
+}
+
+// Beat-the-benchmark deltas carry an arrow as well as a colour, so the sign is
+// never encoded by hue alone.
+.delta-good    { color: $viz-good; font-weight: 600; }
+.delta-bad     { color: $viz-critical; font-weight: 600; }
+
+// Chart parameters live under the plot as a caption. They are content the
+// header can't hold, not a restatement of the header.
+.chart-caption {
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: $viz-muted;
+  margin: 0.15rem 0 0;
+  flex: 0 0 auto;
+}
+
+// ── Tables ───────────────────────────────────────────────────────────────────
+
+.card-body table {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums; // columns must align vertically
+  margin-bottom: 0;
+  width: 100%;
+
+  th {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $viz-muted;
+    border-bottom: 1px solid $viz-rule;
+    border-top: none;
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  td {
+    border-top: none;
+    border-bottom: 1px solid $viz-grid;
+    white-space: nowrap; // dates were wrapping onto two lines
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  // Numeric columns right-align; the row label stays left.
+  td:not(:first-child),
+  th:not(:first-child) { text-align: right; }
+}
+
+// The row-label column names an entity, so it wears the entity's colour chip
+// rather than being colour-coded itself (text keeps text tokens).
+.entity-chip {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  margin-right: 0.45rem;
+  vertical-align: 0.02rem;
+}
+
+// ── Monthly returns calendar ─────────────────────────────────────────────────
+//
+// A grid of signed percentages is polarity data, so it gets a diverging tint
+// (blue gains ↔ red losses, neutral at zero) instead of a uniform wall of
+// black numerals. The sign is always printed, so colour is reinforcement and
+// never the only channel.
+
+table.calendar {
+  border-collapse: separate;
+  border-spacing: 2px; // surface gap between cells, not borders
+
+  td.cal-cell {
+    border: none;
+    border-radius: 3px;
+    padding: 0.25rem 0.45rem;
+    text-align: right;
+  }
+
+  td.cal-total {
+    font-weight: 600;
+    border-left: 2px solid $viz-surface;
+  }
+
+  th { border-bottom: none; }
+}
