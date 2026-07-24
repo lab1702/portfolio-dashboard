@@ -9,8 +9,10 @@ Yahoo Finance.
 ## Features
 
 - **Any tickers Yahoo knows** — equities, ETFs, crypto (`BTC-USD`), indexes
-  (`^GSPC`), international listings. If a fund's history is shorter than the
-  requested window, the analysis is trimmed to the common date range.
+  (`^GSPC`), international listings. Up to 25 symbols and 30 years of history
+  per run; each symbol costs one sequential download, so the caps are what keep
+  the wait bounded. If a fund's history is shorter than the requested window,
+  the analysis is trimmed to the common date range.
 - **Free-scale weights** — weights are relative and normalized automatically:
   `1, 2` allocates ⅓ / ⅔, `40, 30, 30` works as percentages.
 - **Rebalancing** — monthly, quarterly, yearly, or buy & hold.
@@ -22,8 +24,11 @@ Yahoo Finance.
   rate, which the card says on its face. It is return per unit of risk rather
   than *excess* return per unit of risk, so treat the "1+ good, 2+ great"
   bands as generous whenever cash is paying something.
-- **Charts and tables** — performance vs benchmark, growth of $1 per holding,
-  annualized key statistics, monthly-returns calendar, worst-drawdowns table.
+- **Charts and tables** — performance vs benchmark, growth of $1 per holding
+  (the seven largest positions when there are more, so every drawn line keeps a
+  distinct colour), annualized key statistics, monthly-returns calendar,
+  worst-drawdowns table. Both charts carry alt text built from the current
+  backtest, and the row-colour chips are paired with the series name in text.
 - **Calendar-true annualization** — CAGR/Sharpe/volatility use a continuous
   effective scale derived from the data's own observation frequency, so
   weekday markets (~252/yr), Sunday–Thursday exchanges, and 7-day crypto are

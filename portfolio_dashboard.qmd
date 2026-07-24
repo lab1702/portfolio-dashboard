@@ -33,6 +33,9 @@ common date range.
 Weights are relative and normalized automatically — e.g. weights
 `1, 2` allocate 33% and 67%.
 
+Up to 25 symbols and 30 years of history. Each symbol is one
+download, so the cap is what keeps the wait bounded.
+
 ```{r}
 #| context: server
 
@@ -159,7 +162,10 @@ output$perf_chart <- renderPlot({
     lwd = 2, element.color = GRID_COLOR,
     cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
     main.timespan = FALSE)   # the Period value box already states the window
-}, bg = "transparent")
+}, bg = "transparent", alt = function() {
+  bt <- backtest()
+  perf_chart_alt(bt$port, bt$bench, bt$p$bench)
+})
 
 output$fund_caption <- renderUI({
   bt <- backtest()
@@ -180,7 +186,10 @@ output$fund_chart <- renderPlot({
     lwd = 2, element.color = GRID_COLOR,
     cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
     main.timespan = FALSE)
-}, bg = "transparent")
+}, bg = "transparent", alt = function() {
+  bt <- backtest()
+  fund_chart_alt(bt$returns, bt$plan$shown)
+})
 
 # A colour chip per row ties each table row to its line in the charts, so the
 # legend and the table are the same key. The name stays in text ink — the chip
@@ -189,7 +198,9 @@ output$stats_table <- renderTable({
   bt <- backtest()
   tbl <- build_stats_table(bt$port, bt$returns, bt$p$bench, bt$p$syms, bt$scale)
   cols <- bt$plan$colors
-  cbind(" " = entity_chip(rownames(tbl), cols[rownames(tbl)]), tbl)
+  out <- cbind(" " = entity_chip(rownames(tbl), cols[rownames(tbl)]), tbl)
+  names(out)[1] <- CHIP_COLUMN_HEADER
+  out
 }, rownames = FALSE, sanitize.text.function = identity)
 
 # The calendar is polarity data — gains against losses — so it gets a diverging

@@ -137,6 +137,42 @@ test_that("delta_vs_benchmark reports n/a instead of inventing a shortfall", {
   expect_equal(delta_vs_benchmark(0.1, NA_real_)$text, "n/a")
 })
 
+test_that("perf chart alt text carries the run's own numbers", {
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 400)
+  port  <- xts::xts(rep(0.0010, 400), order.by = dates)
+  bench <- xts::xts(rep(0.0005, 400), order.by = dates)
+  colnames(port) <- "Portfolio"
+
+  txt <- perf_chart_alt(port, bench, "SPY")
+  expect_match(txt, "SPY", fixed = TRUE)
+  expect_match(txt, "Jan 2021", fixed = TRUE)          # window, not "Plot object"
+  expect_match(txt, fmt_dollar(grew_to(port)), fixed = TRUE)
+  expect_match(txt, fmt_dollar(grew_to(bench)), fixed = TRUE)
+  expect_match(txt, "drawdown", fixed = TRUE)          # names all three panels
+  expect_false(grepl("Plot object", txt, fixed = TRUE))
+})
+
+test_that("fund chart alt text describes the lines drawn, and only those", {
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 200)
+  returns <- xts::xts(cbind(VOO = rep(0.0010, 200), TQQQ = rep(0.0020, 200),
+                            SCHD = rep(0.0005, 200)), order.by = dates)
+
+  txt <- fund_chart_alt(returns, c("VOO", "TQQQ"))
+  expect_match(txt, "VOO ends at \\$\\d+\\.\\d{2}")
+  expect_match(txt, "TQQQ ends at \\$\\d+\\.\\d{2}")
+  # SCHD is a column of `returns` but is not drawn, so describing it would be
+  # narrating a line that is not on the chart
+  expect_false(grepl("SCHD", txt, fixed = TRUE))
+  expect_match(txt, "Jan 2021", fixed = TRUE)
+})
+
+test_that("the chip column is named for assistive tech but not on screen", {
+  expect_match(CHIP_COLUMN_HEADER, "visually-hidden", fixed = TRUE)
+  # renderTable passes column names through sanitize.text.function (identity
+  # here), so this has to be markup rather than a bare label
+  expect_match(CHIP_COLUMN_HEADER, "^<span[^>]*>[^<]+</span>$")
+})
+
 test_that("rebal_label covers every choice the sidebar offers", {
   # REBAL_CHOICES is what the selectInput is built from, so this reads the
   # sidebar's actual vocabulary rather than a third hardcoded copy of it.

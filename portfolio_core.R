@@ -262,6 +262,38 @@ sharpe_caption <- function(s) {
           sharpe_verdict(s), fmt_pct(RISK_FREE_RATE))
 }
 
+# renderPlot's alt text defaults to the static string "Plot object", which left
+# the two charts — the dashboard's main content — as the one place where meaning
+# arrived visually and nowhere else, in a layout that otherwise pairs every
+# colour with a printed sign and every table header with a scope. These build
+# the description out of the same backtest the chart is drawn from, so the words
+# offered to a screen reader cannot end up describing a different run than the
+# picture beside them.
+perf_chart_alt <- function(port, bench, bench_sym)
+  sprintf(paste("Three stacked panels — cumulative growth, daily returns and",
+                "drawdown — for the portfolio against %s, %s to %s.",
+                "%s in the portfolio grew to %s; in %s, to %s."),
+          bench_sym, fmt_month_year(start(port)), fmt_month_year(end(port)),
+          fmt_dollar(START_CAPITAL), fmt_dollar(grew_to(port)),
+          bench_sym, fmt_dollar(grew_to(bench)))
+
+# Describes the series actually drawn, not every column available: the chart
+# shows `shown`, so the alt text has to say the same or it is describing lines
+# that are not there.
+fund_chart_alt <- function(returns, shown) {
+  ends <- vapply(shown, function(s) grew_to(returns[, s], capital = 1),
+                 numeric(1))
+  sprintf("Growth of $1 in each holding on its own, %s to %s: %s.",
+          fmt_month_year(start(returns)), fmt_month_year(end(returns)),
+          paste(sprintf("%s ends at $%.2f", shown, ends), collapse = "; "))
+}
+
+# The chip column carries no visible label — the chip is the entire content —
+# but a blank <th> announces to a screen reader as an unnamed column. The name
+# lives in text only assistive tech reaches. renderTable puts column names
+# through sanitize.text.function, which is identity here, so the span survives.
+CHIP_COLUMN_HEADER <- '<span class="visually-hidden">Series</span>'
+
 # Everything downstream of the price download. `prices` is a merged, na.omit'd
 # xts of adjusted prices whose columns are named by symbol; `wts` is already
 # normalized to fractions.
