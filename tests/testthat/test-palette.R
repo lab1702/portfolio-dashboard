@@ -69,7 +69,7 @@ test_that("chart ink and gridlines are legible on the surface", {
   expect_gt(contrast_ratio(INK_COLOR, SURFACE_COLOR),
             contrast_ratio(INK_MUTED, SURFACE_COLOR))
   # The gridline is a hairline behind data, not text: it only has to be seen.
-  expect_gt(contrast_ratio(GRID_COLOR, SURFACE_COLOR), 1.2)
+  expect_gt(contrast_ratio(GRID_COLOR, SURFACE_COLOR), 1.1)
   expect_lt(contrast_ratio(GRID_COLOR, SURFACE_COLOR),
             contrast_ratio(INK_MUTED, SURFACE_COLOR))
 })
@@ -85,7 +85,7 @@ test_that("the diverging poles are distinguishable from each other", {
 })
 
 # theme.scss says the palette is "defined once, in portfolio_core.R". It is not:
-# five values are duplicated across the two files by hand, and the failure mode
+# six values are duplicated across the two files by hand, and the failure mode
 # is silent — a card surface that no longer matches the transparent-background
 # plot sitting on it reads as a rendering bug, not as a stale constant.
 

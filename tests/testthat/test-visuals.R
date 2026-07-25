@@ -216,9 +216,15 @@ test_that("the composed performance chart draws without disturbing par()", {
   combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
                              SPY       = rep(0.0005, 300)), order.by = dates)
 
-  before <- par(no.readonly = TRUE)
   pdf(NULL)                      # draw to a null device, not a file
-  on.exit({ dev.off(); par(before) }, add = TRUE)
+  before <- par(no.readonly = TRUE)  # this device's own defaults, not the
+                                      # previous device's — captured after
+                                      # pdf(NULL) so it is what the chart's own
+                                      # on.exit is actually restoring to
+  # par(before) first, while the null device is still current: applying it
+  # after dev.off() would land on whatever device is active next, stamping
+  # this device's defaults onto one that never had them.
+  on.exit({ par(before); dev.off() }, add = TRUE)
 
   # Not expect_silent: the panel functions are entitled to warn about a short
   # series or a degenerate axis, and a test that forbids that is a test that
