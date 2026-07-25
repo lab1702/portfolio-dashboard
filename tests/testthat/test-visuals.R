@@ -206,6 +206,29 @@ test_that("the performance caption reads as a sentence for every choice", {
                "100% VOO · buy & hold, never rebalanced · benchmark SPY")
 })
 
+test_that("the composed performance chart draws without disturbing par()", {
+  # The chart is composed from three panel functions rather than taken whole
+  # from charts.PerformanceSummary, so that the drawdown panel can carry the
+  # loss colour while the top panel keeps the series colours. Reproducing the
+  # library's par() glue means we now own restoring it: a leaked par() would
+  # corrupt every plot drawn after this one in the same session.
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 300)
+  combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
+                             SPY       = rep(0.0005, 300)), order.by = dates)
+
+  before <- par(no.readonly = TRUE)
+  pdf(NULL)                      # draw to a null device, not a file
+  on.exit({ dev.off(); par(before) }, add = TRUE)
+
+  # Not expect_silent: the panel functions are entitled to warn about a short
+  # series or a degenerate axis, and a test that forbids that is a test that
+  # fails for reasons having nothing to do with the chart.
+  expect_no_error(chart_performance_summary(combined, PORTFOLIO_INK,
+                                            SERIES_SLOTS[1]))
+  expect_equal(par("mar"), before$mar)
+  expect_equal(par("oma"), before$oma)
+})
+
 test_that("run_problem_banner reports every message, once, or nothing at all", {
   expect_null(run_problem_banner(character(0)))
   expect_null(run_problem_banner(NULL))

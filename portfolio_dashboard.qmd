@@ -170,18 +170,12 @@ output$perf_caption <- renderUI({
   chart_caption(perf_caption_text(bt$p$wts, bt$p$syms, bt$p$rebal, bt$p$bench))
 })
 
-# The card header already names each chart, so the plots draw no title of their
-# own — the caption below carries the parameters instead, which is content
-# rather than a second copy of the header.
 output$perf_chart <- renderPlot({
   bt <- backtest()
   cols <- bt$plan$colors
-  charts.PerformanceSummary(bt$combined,
-    wealth.index = TRUE, main = "", legend.loc = "topleft",
-    colorset = unname(cols[colnames(bt$combined)]),
-    lwd = 2, element.color = GRID_COLOR,
-    cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
-    main.timespan = FALSE)   # the Period value box already states the window
+  chart_performance_summary(bt$combined,
+                            port_color  = cols[["Portfolio"]],
+                            bench_color = cols[[bt$p$bench]])
 }, bg = "transparent", alt = function() {
   bt <- backtest()
   perf_chart_alt(bt$port, bt$bench, bt$p$bench)
@@ -204,6 +198,7 @@ output$fund_chart <- renderPlot({
     wealth.index = TRUE, legend.loc = "topleft", main = "",
     colorset = unname(cols[shown]),
     lwd = 2, element.color = GRID_COLOR,
+    bg = SURFACE_COLOR, labels.col = INK_MUTED, grid.color = GRID_COLOR,
     cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
     main.timespan = FALSE)
 }, bg = "transparent", alt = function() {
