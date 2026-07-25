@@ -25,8 +25,15 @@ jobs:
       CHROME_NO_SANDBOX: "1"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
+      # r-lib/actions is on its newest major (v2; latest patch v2.9.0 at time of
+      # writing) and still declares runs.using: node20, so these two steps go on
+      # producing the Node 20 deprecation annotation. That is upstream, not a
+      # stale pin here — do not go looking for a v3 to bump to, there isn't one.
+      # Left floating at @v2 so a future node24 release is picked up without an
+      # edit. Replacing these with hand-rolled install.packages() would silence
+      # it and cost the dependency cache that keeps this job near two minutes.
       - uses: r-lib/actions/setup-r@v2
         with:
           # Binary packages from the public Posit package manager. Building
@@ -56,7 +63,7 @@ jobs:
 
       - uses: quarto-dev/quarto-actions/setup@v2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
