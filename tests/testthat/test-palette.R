@@ -83,3 +83,41 @@ test_that("the diverging poles are distinguishable from each other", {
                ADJACENT_MIN_CVD)
   }
 })
+
+# theme.scss says the palette is "defined once, in portfolio_core.R". It is not:
+# five values are duplicated across the two files by hand, and the failure mode
+# is silent — a card surface that no longer matches the transparent-background
+# plot sitting on it reads as a rendering bug, not as a stale constant.
+
+scss_token <- function(name, path = "../../theme.scss") {
+  lines <- readLines(path, warn = FALSE)
+  hit <- grep(sprintf("^\\%s:\\s*(#[0-9a-fA-F]{6})\\s*;", name), lines, value = TRUE)
+  expect_length(hit, 1)
+  tolower(sub(sprintf("^\\%s:\\s*(#[0-9a-fA-F]{6})\\s*;.*$", name), "\\1", hit))
+}
+
+test_that("theme.scss and portfolio_core.R agree on every shared colour", {
+  expect_equal(scss_token("$viz-series-1"), tolower(SERIES_SLOTS[1]))
+  expect_equal(scss_token("$viz-series-1"), tolower(GAIN_COLOR))
+  expect_equal(scss_token("$viz-surface"),  tolower(SURFACE_COLOR))
+  expect_equal(scss_token("$viz-grid"),     tolower(GRID_COLOR))
+  expect_equal(scss_token("$viz-muted"),    tolower(INK_MUTED))
+  expect_equal(scss_token("$viz-critical"), tolower(LOSS_COLOR))
+  expect_equal(scss_token("$viz-ink"),      tolower(INK_COLOR))
+})
+
+test_that("the filled value box holds white text", {
+  expect_gte(contrast_ratio("#ffffff", scss_token("$viz-accent-fill")),
+             TEXT_MIN_CONTRAST)
+  # It must also stay below the accent line colour in brightness, or the one
+  # filled card becomes the brightest object on a deliberately dark page.
+  expect_lt(relative_luminance(scss_token("$viz-accent-fill")),
+            relative_luminance(scss_token("$viz-series-1")))
+})
+
+test_that("secondary ink clears AA on the card surface", {
+  expect_gte(contrast_ratio(scss_token("$viz-ink-2"), SURFACE_COLOR),
+             TEXT_MIN_CONTRAST)
+  expect_gte(contrast_ratio(scss_token("$viz-good"), SURFACE_COLOR),
+             TEXT_MIN_CONTRAST)
+})
