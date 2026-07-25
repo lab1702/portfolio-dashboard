@@ -22,7 +22,7 @@ START_CAPITAL <- 10000
 PORTFOLIO_INK <- "#ffffff"
 
 # Validated categorical order for the #0f0f0f card surface: worst adjacent pair
-# is dE2000 45.6 at normal vision and 9.95 under simulated dichromacy. The
+# is dE2000 45.6 at normal vision and 9.92 under simulated dichromacy. The
 # *ordering* is the colourblind-safety mechanism, not decoration — these eight
 # hues in the order they were first authored fail, amber against pink at dE 4.5
 # under tritanopia. test-palette.R holds the thresholds; re-run it rather than
@@ -419,22 +419,37 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   # not reach it — so without these the chart is a white rectangle on a black
   # card. The plot is opaque either way; it is merely painted to match.
   #
-  # main = "" on every panel: the card header already names this chart, so the
-  # caption below carries the parameters instead of a second copy of the title.
-  # main.timespan = FALSE for the same reason on the date range specifically:
-  # left at its default, plot.xts draws its own "start / end" header in the
-  # top-right corner of this panel — a second, ISO-formatted copy of the window
-  # the Period value box already states in fmt_month_year's words.
-  chob <- chart.CumReturns(combined, main = "", xaxis = FALSE,
+  # Each panel keeps its own main: chart.CumReturns/BarVaR/Drawdown draw it as
+  # an in-plot title, not the outer one charts.PerformanceSummary sets with
+  # title(main, outer = TRUE) — this function never calls that, so there is no
+  # second, card-header-duplicating title above the three panels, only the
+  # names a reader needs to tell "Cumulative Return" from "Drawdown" apart
+  # without a legend (the middle panel has none). ylab is not part of that:
+  # plot.xts renders no y-axis title regardless of what is passed, so the
+  # three panels below pass none rather than an argument that reads as a label
+  # but does nothing.
+  #
+  # main.timespan = FALSE is still suppressed, for a narrower reason: left at
+  # its default, plot.xts draws its own "start / end" header in the top-right
+  # corner of this panel — a second, ISO-formatted copy of the window the
+  # Period value box already states in fmt_month_year's words.
+  chob <- chart.CumReturns(combined, main = "Cumulative Return", xaxis = FALSE,
                            legend.loc = "topleft", main.timespan = FALSE,
-                           wealth.index = TRUE, ylab = "Cumulative Return",
+                           wealth.index = TRUE,
                            colorset = series, lwd = weights,
                            element.color = GRID_COLOR, bg = SURFACE_COLOR,
                            labels.col = INK_MUTED, grid.color = GRID_COLOR,
                            cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
 
-  chob <- chart.BarVaR(combined, main = "", xaxis = FALSE,
-                       ylab = "Periodic Return", methods = "none",
+  # chart.BarVaR's own default main is paste(date.label, "Return"), where
+  # date.label comes from periodicity(x)$scale. Hardcoded here rather than
+  # derived: `combined` is always daily. compute_backtest() never resamples
+  # (no to.weekly/to.monthly), and get_prices() calls quantmod::getSymbols()
+  # with no periodicity argument, which returns Yahoo's daily series. If either
+  # of those changes, this label has to start reading periodicity(combined)
+  # the way the library does.
+  chob <- chart.BarVaR(combined, main = "Daily Return", xaxis = FALSE,
+                       methods = "none",
                        event.labels = NULL, ylog = FALSE, add = TRUE,
                        colorset = series, lwd = weights,
                        element.color = GRID_COLOR, bg = SURFACE_COLOR,
@@ -445,7 +460,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   # colour. The benchmark takes muted ink rather than a second red: two reds
   # far enough apart to read as two lines could not both clear 3:1 on this
   # surface, and red-against-grey separates on lightness as well as hue.
-  chob <- chart.Drawdown(combined, main = "", ylab = "Drawdown",
+  chob <- chart.Drawdown(combined, main = "Drawdown",
                          event.labels = NULL, ylog = FALSE, add = TRUE,
                          colorset = c(LOSS_COLOR, INK_MUTED), lwd = weights,
                          element.color = GRID_COLOR, bg = SURFACE_COLOR,
