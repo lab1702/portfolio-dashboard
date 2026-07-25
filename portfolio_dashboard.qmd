@@ -24,6 +24,7 @@ textInput("benchmark", "Benchmark", value = "SPY")
 numericInput("years", "Years of history", value = 5, min = 1, max = MAX_YEARS, step = 1)
 selectInput("rebal", "Rebalance", choices = REBAL_CHOICES, selected = "months")
 actionButton("run", "Run Backtest", class = "btn-primary")
+uiOutput("run_problems")   # failures report here, once — see attempt()
 ```
 
 Dividends are reinvested (adjusted prices). If a fund's history is
@@ -39,19 +40,27 @@ download, so the cap is what keeps the wait bounded.
 ```{r}
 #| context: server
 
-parse_inputs <- eventReactive(input$run, {
+run_inputs <- eventReactive(input$run, {
   syms  <- parse_symbols(input$symbols)
   wts   <- parse_weights(input$weights)
   bench <- toupper(trimws(input$benchmark))
-  errs  <- portfolio_input_errors(syms, wts, bench, input$years)
-  validate(need(length(errs) == 0, paste(errs, collapse = "\n")))
-  list(syms = syms, wts = normalize_weights(wts), bench = bench,
+  list(errors = portfolio_input_errors(syms, wts, bench, input$years),
+       syms = syms, wts = wts, bench = bench,
        years = input$years,
        rebal = input$rebal)
 }, ignoreNULL = FALSE)  # runs once on startup with defaults
 
-backtest <- reactive({
-  p <- parse_inputs()
+# One attempt, one place to report it. Every expected failure — a bad form, a
+# dead ticker, too little overlapping history — comes back as a message in
+# $errors instead of being thrown with validate(), because validate()
+# propagates to every output that touched the reactive: eleven copies of the
+# same sentence, clipped inside the value boxes. See run_problem_banner().
+attempt <- reactive({
+  i <- run_inputs()
+  if (length(i$errors)) return(list(errors = i$errors))
+
+  p <- list(syms = i$syms, wts = normalize_weights(i$wts), bench = i$bench,
+            years = i$years, rebal = i$rebal)
   from <- Sys.Date() - round(365.25 * p$years)
 
   get_prices <- function(t) {
@@ -78,8 +87,9 @@ backtest <- reactive({
   })
 
   failed <- names(raw)[vapply(raw, is.null, logical(1))]
-  validate(need(length(failed) == 0,
-    paste("Could not download:", paste(failed, collapse = ", "))))
+  if (length(failed))
+    return(list(errors = paste("Could not download:",
+                               paste(failed, collapse = ", "))))
 
   # unname() before do.call: a named list turns each ticker into a named
   # argument to merge.xts, and a symbol matching one of its parameters would be
@@ -90,12 +100,24 @@ backtest <- reactive({
   prices <- do.call(merge, unname(raw))
   colnames(prices) <- all_syms
   prices <- na.omit(prices)
-  validate(need(nrow(prices) > 30, "Not enough overlapping history for these symbols."))
+  if (nrow(prices) <= 30)
+    return(list(errors = "Not enough overlapping history for these symbols."))
 
   # Selection and colour are settled once, here, so every card below is drawing
   # from the same plan rather than each re-deriving its own.
-  c(list(p = p, plan = display_plan(p$bench, p$syms, p$wts)),
-    compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal))
+  list(result = c(list(p = p, plan = display_plan(p$bench, p$syms, p$wts)),
+                  compute_backtest(prices, p$syms, p$wts, p$bench, p$rebal)))
+})
+
+output$run_problems <- renderUI(run_problem_banner(attempt()$errors))
+
+# req()'s default cancelOutput = FALSE blanks the cards, which is the point: a
+# failed run must not leave the previous backtest's numbers on screen looking
+# current while the sidebar quietly reports an error.
+backtest <- reactive({
+  a <- attempt()
+  req(is.null(a$errors))
+  a$result
 })
 
 vb_note <- function(...) tags$span(class = "vb-note", ...)
@@ -145,9 +167,7 @@ output$vb_period <- renderText({
 
 output$perf_caption <- renderUI({
   bt <- backtest()
-  chart_caption(sprintf("%s · rebalanced %s · benchmark %s",
-    paste0(round(bt$p$wts * 100, 1), "% ", bt$p$syms, collapse = " / "),
-    rebal_label(bt$p$rebal), bt$p$bench))
+  chart_caption(perf_caption_text(bt$p$wts, bt$p$syms, bt$p$rebal, bt$p$bench))
 })
 
 # The card header already names each chart, so the plots draw no title of their
@@ -290,7 +310,12 @@ textOutput("vb_period")
 
 ## Column {width=40%}
 
-### Row
+<!-- charts.PerformanceSummary stacks three panels in this card against the
+     Per-Holding chart's one, and its two short panels draw their own y axes.
+     Split evenly, those panels got ~70px each and their tick labels collapsed
+     into an illegible smear of digits, so this row takes the larger share. -->
+
+### Row {height=62%}
 
 ```{r}
 #| title: "Performance vs Benchmark"
@@ -298,7 +323,7 @@ plotOutput("perf_chart")
 uiOutput("perf_caption")
 ```
 
-### Row
+### Row {height=38%}
 
 ```{r}
 #| title: "Per-Holding Growth"

@@ -167,6 +167,20 @@ portfolio_input_errors <- function(syms, wts, bench, years) {
 
 normalize_weights <- function(wts) wts / sum(wts)
 
+# Every expected failure reports once, in the sidebar, beneath the button that
+# triggered it. The dashboard used to raise these through validate(), which
+# propagates to every output that touched the reactive: one bad form painted
+# the same text into all eleven cards, and the value boxes — fixed height, two
+# lines of room — clipped a three-message error mid-word and dropped the third
+# message entirely. Returns NULL for a clean run so renderUI emits nothing.
+run_problem_banner <- function(msgs) {
+  if (!length(msgs)) return(NULL)
+  htmltools::tags$div(
+    class = "run-problems", role = "alert",
+    htmltools::tags$p(class = "run-problems-title", "Cannot run this backtest"),
+    htmltools::tags$ul(lapply(unname(msgs), htmltools::tags$li)))
+}
+
 # Month names are pinned rather than taken from %b, which renders in the
 # session locale: an R process started under a German or French locale served
 # "Mrz 05, 2021" and "Mrz" column headers inside otherwise English chrome. The
@@ -197,10 +211,24 @@ fmt_month_day_year <- function(d) {
 REBAL_CHOICES <- c(Monthly = "months", Quarterly = "quarters",
                    Yearly = "years", "Buy & Hold" = "none")
 
-REBAL_LABELS <- c(months = "monthly", quarters = "quarterly",
-                  years = "yearly", none = "buy & hold, never rebalanced")
+# Each label is a complete phrase rather than a word the caption prefixes with
+# "rebalanced". The prefix version read "rebalanced buy & hold, never
+# rebalanced" for the one option that isn't a frequency, because "none" is the
+# only label that has to describe the absence of the thing being prefixed.
+# Whole phrases have no such special case.
+REBAL_LABELS <- c(months = "rebalanced monthly", quarters = "rebalanced quarterly",
+                  years = "rebalanced yearly", none = "buy & hold, never rebalanced")
 
 rebal_label <- function(rebal) unname(REBAL_LABELS[rebal])
+
+# The assembled sentence lives here, not in the .qmd, so a test can read the
+# whole caption. The prefix bug above survived a green suite precisely because
+# the sentence was built inside renderUI where no test could reach it — only
+# the individual labels were covered.
+perf_caption_text <- function(wts, syms, rebal, bench_sym)
+  sprintf("%s · %s · benchmark %s",
+          paste0(round(wts * 100, 1), "% ", syms, collapse = " / "),
+          rebal_label(rebal), bench_sym)
 
 fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
 

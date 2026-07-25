@@ -133,6 +133,42 @@ $input-focus-border-color: $viz-series-1;
   }
 }
 
+// A failed run reports here, under the button that triggered it, instead of
+// into all eleven output slots. The sidebar can hold an arbitrary number of
+// messages at full length — the value boxes clip at two lines, which is how a
+// three-message form error used to lose its third message. Two classes beat
+// `.sidebar p` on specificity, so the title keeps its own colour and size.
+.run-problems {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba($viz-critical, 0.35);
+  border-left: 3px solid $viz-critical;
+  border-radius: 0.375rem;
+  background: rgba($viz-critical, 0.06);
+
+  .run-problems-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: $viz-critical;
+    margin: 0 0 0.3rem;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 1.05rem;
+  }
+
+  li {
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: $viz-ink-2;
+    margin-bottom: 0.15rem;
+  }
+
+  li:last-child { margin-bottom: 0; }
+}
+
 // ── Value boxes ──────────────────────────────────────────────────────────────
 //
 // One filled card carries the headline number; the rest are quiet surfaces.
@@ -222,6 +258,17 @@ $input-focus-border-color: $viz-series-1;
   line-height: 1.35;
   color: $viz-muted;
   margin: 0.15rem 0 0;
+  flex: 0 0 auto;
+}
+
+// Quarto wraps every chunk output in its own .cell-output-display, and bslib
+// gives each one `flex: 1 1 auto` — so the caption's wrapper split the card's
+// spare height with the plot instead of hugging its one line of text. That put
+// 96px of wrapper around an 18px caption and left the Performance chart 130px
+// short of its card. The caption is content-sized; the plot takes the slack.
+// (`flex: 0 0 auto` on .chart-caption itself is not enough — the growing box
+// is the wrapper around it, not the paragraph.)
+.card-body > .cell-output-display:has(.chart-caption) {
   flex: 0 0 auto;
 }
 

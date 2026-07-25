@@ -183,3 +183,44 @@ test_that("rebal_label covers every choice the sidebar offers", {
   }
   expect_true(all(nzchar(names(REBAL_CHOICES))))  # every option is labelled
 })
+
+test_that("the performance caption reads as a sentence for every choice", {
+  # The test above passed while the caption said "rebalanced buy & hold, never
+  # rebalanced": it checked that each label existed, never that the assembled
+  # sentence scanned. This asserts the whole string, for every option the
+  # sidebar can produce.
+  for (choice in REBAL_CHOICES) {
+    txt <- perf_caption_text(c(0.4, 0.6), c("VOO", "SCHD"), choice, "SPY")
+    expect_false(grepl("rebalanced.*rebalanced", txt), info = choice)
+    expect_match(txt, "^40% VOO / 60% SCHD · ", info = choice)
+    expect_match(txt, " · benchmark SPY$", info = choice)
+  }
+
+  expect_equal(perf_caption_text(1, "VOO", "months", "SPY"),
+               "100% VOO · rebalanced monthly · benchmark SPY")
+  expect_equal(perf_caption_text(1, "VOO", "none", "SPY"),
+               "100% VOO · buy & hold, never rebalanced · benchmark SPY")
+})
+
+test_that("run_problem_banner reports every message, once, or nothing at all", {
+  expect_null(run_problem_banner(character(0)))
+  expect_null(run_problem_banner(NULL))
+
+  msgs <- c("Number of symbols and weights must match.",
+            "Weights cannot be negative.",
+            "Years of history cannot exceed 30.")
+  html <- as.character(run_problem_banner(msgs))
+
+  # One list item per message, each appearing exactly once — the whole point of
+  # the banner is that it replaced eleven copies of the same text.
+  expect_equal(lengths(regmatches(html, gregexpr("<li>", html, fixed = TRUE))),
+               length(msgs))
+  for (m in msgs) {
+    expect_equal(lengths(regmatches(html, gregexpr(m, html, fixed = TRUE))), 1L,
+                 info = m)
+  }
+
+  # role="alert" is what makes a message that appears after the click reach a
+  # screen reader at all.
+  expect_match(html, 'role="alert"', fixed = TRUE)
+})

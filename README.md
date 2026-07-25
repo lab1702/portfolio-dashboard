@@ -55,6 +55,24 @@ frequency in the sidebar, then click **Run Backtest**.
 | `portfolio_core.R` | Pure logic: parsing, validation, backtest math, table builders, colour system |
 | `theme.scss` | Bootstrap/SCSS theme: surfaces, typography, value boxes, tables |
 | `tests/` | testthat suite covering the core logic |
+| `tools/capture-screenshot.mjs` | Regenerates the screenshot above (see below) |
+
+## Screenshot
+
+The image at the top of this README is not produced by the build, so it goes
+stale whenever the layout or a visible caption changes. Retake it with the
+dashboard already serving:
+
+```bash
+quarto serve portfolio_dashboard.qmd --port 4455
+node tools/capture-screenshot.mjs http://127.0.0.1:4455/ images/dashboard.png
+```
+
+It waits for every card to actually paint (Shiny fills them over a websocket
+long after page load), pins the output to 3200x2300 so the README image never
+jumps size, and fails the run if any card is clipping content behind a
+scrollbar. Needs Node 18+ and Chrome; set `CHROME_PATH` if Chrome isn't in a
+standard location.
 
 ## Tests
 
