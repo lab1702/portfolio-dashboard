@@ -421,8 +421,12 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   #
   # main = "" on every panel: the card header already names this chart, so the
   # caption below carries the parameters instead of a second copy of the title.
+  # main.timespan = FALSE for the same reason on the date range specifically:
+  # left at its default, plot.xts draws its own "start / end" header in the
+  # top-right corner of this panel — a second, ISO-formatted copy of the window
+  # the Period value box already states in fmt_month_year's words.
   chob <- chart.CumReturns(combined, main = "", xaxis = FALSE,
-                           legend.loc = "topleft",
+                           legend.loc = "topleft", main.timespan = FALSE,
                            wealth.index = TRUE, ylab = "Cumulative Return",
                            colorset = series, lwd = weights,
                            element.color = GRID_COLOR, bg = SURFACE_COLOR,

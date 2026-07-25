@@ -229,6 +229,42 @@ test_that("the composed performance chart draws without disturbing par()", {
   expect_equal(par("oma"), before$oma)
 })
 
+test_that("the composed performance chart actually draws pixels, not a blank canvas", {
+  # chart.CumReturns/chart.BarVaR/chart.Drawdown return a "replot_xts" chob
+  # rather than drawing eagerly (like lattice), and only draw when printed. A
+  # bare top-level call auto-prints; a call inside a function body does not.
+  # chart_performance_summary() prints the chained chob for exactly this
+  # reason — the test above draws to a null pdf() device and would pass just
+  # as well if that print() were deleted and the chart rendered nothing at
+  # all, because a null device has no pixels to be wrong about. This test
+  # renders to a real PNG and checks that the modal colour is the card
+  # surface, not the white plot.xts paints by default — the same technique,
+  # and the same census, that caught the original blank-canvas bug.
+  skip_if_not_installed("png")
+
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 300)
+  combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
+                             SPY       = rep(0.0005, 300)), order.by = dates)
+
+  path <- tempfile(fileext = ".png")
+  on.exit(unlink(path), add = TRUE)
+  grDevices::png(path, width = 700, height = 420)
+  ok <- tryCatch({
+    chart_performance_summary(combined, PORTFOLIO_INK, SERIES_SLOTS[1])
+    TRUE
+  }, finally = grDevices::dev.off())
+  stopifnot(ok)
+
+  img <- png::readPNG(path)
+  pixels <- grDevices::rgb(img[, , 1], img[, , 2], img[, , 3])
+  modal_color <- names(sort(table(pixels), decreasing = TRUE))[1]
+
+  # Uppercase: grDevices::rgb() always emits uppercase hex, unlike our
+  # lowercase constants.
+  expect_equal(modal_color, toupper(SURFACE_COLOR))
+  expect_false(modal_color == "#FFFFFF")
+})
+
 test_that("run_problem_banner reports every message, once, or nothing at all", {
   expect_null(run_problem_banner(character(0)))
   expect_null(run_problem_banner(NULL))
