@@ -713,11 +713,39 @@ git commit -m "Invert the chrome to black, and assert the scss/R seam"
 
 **Interfaces:**
 - Consumes: `SERIES_SLOTS`, `PORTFOLIO_INK`, `LOSS_COLOR`, `INK_MUTED`,
-  `GRID_COLOR` from Task 2.
+  `GRID_COLOR`, `SURFACE_COLOR` from Task 2.
 - Produces:
   `chart_performance_summary(combined, port_color, bench_color) -> invisible(NULL)`
   where `combined` is the two-column xts from `compute_backtest()`, column 1 the
   portfolio and column 2 the benchmark. Draws the three stacked panels.
+
+**Read this before you start — it invalidates an earlier claim in this plan.**
+
+`renderPlot(bg = "transparent")` does **not** give these charts a transparent
+background. `chart.TimeSeries` delegates to `xts::plot.xts`, which fills the
+plot region itself using its own `bg` argument, defaulting to `#FFFFFF`. Verified
+by rendering the Per-Holding chart to PNG and counting pixels: the output had no
+alpha channel at all and 281,412 of 294,000 pixels were pure white. On a black
+card that is a glaring white rectangle, on both charts.
+
+Two further defaults land the same way, because `chart.TimeSeries` takes
+`element.color` and `grid.color` as *separate* parameters and the dashboard only
+ever passed the first:
+
+| what | default | must become |
+|---|---|---|
+| `bg` | `#FFFFFF` | `SURFACE_COLOR` |
+| `labels.col` (axis text) | `#333333` | `INK_MUTED` |
+| `grid.color` (gridlines) | `darkgray` | `GRID_COLOR` |
+
+All three reach `plot.xts` through `...`, confirmed by re-rendering with them
+set: the pixel census became `#0F0F0F` 281,412 / `#232323` 5,830 / `#858585`
+2,042, with the series colours intact.
+
+Note what this makes of `bg = "transparent"`: the plot is opaque and merely
+*painted the same colour as the card*. That is precisely why the `$viz-surface`
+↔ `SURFACE_COLOR` seam test from Task 3 is load-bearing rather than tidy — if
+those two drift apart, a visible rectangle appears around every chart.
 
 - [ ] **Step 1: Read the library's own layout before copying it**
 
@@ -796,14 +824,22 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   par(oma = c(2, 0, 4, 0), mar = c(1, 4, 4, 2))
   par(mar = c(1, 4, 0, 2))
 
+  # bg, labels.col and grid.color are not decoration. plot.xts paints its own
+  # plot region, defaulting to white, and renderPlot's bg = "transparent" does
+  # not reach it — so without these the chart is a white rectangle on a black
+  # card. The plot is opaque either way; it is merely painted to match.
   chart.CumReturns(combined, main = "", xaxis = FALSE, legend.loc = "topleft",
                    wealth.index = TRUE, ylab = "Cumulative Return",
                    colorset = series, lwd = weights, element.color = GRID_COLOR,
+                   bg = SURFACE_COLOR, labels.col = INK_MUTED,
+                   grid.color = GRID_COLOR,
                    cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
 
   chart.BarVaR(combined, main = "", xaxis = FALSE, ylab = "Periodic Return",
                methods = "none", event.labels = NULL, ylog = FALSE, add = TRUE,
                colorset = series, lwd = weights, element.color = GRID_COLOR,
+               bg = SURFACE_COLOR, labels.col = INK_MUTED,
+               grid.color = GRID_COLOR,
                cex.axis = 0.85, cex.lab = 0.85)
 
   par(mar = c(5, 4, 0, 2))
@@ -816,11 +852,20 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                  event.labels = NULL, ylog = FALSE, add = TRUE,
                  colorset = c(LOSS_COLOR, INK_MUTED), lwd = weights,
                  element.color = GRID_COLOR,
+                 bg = SURFACE_COLOR, labels.col = INK_MUTED,
+                 grid.color = GRID_COLOR,
                  cex.axis = 0.85, cex.lab = 0.85)
 
   invisible(NULL)
 }
 ```
+
+The three colour arguments are shown on all three panel calls. The second and
+third pass `add = TRUE`, and it is possible those panels inherit the theme from
+the first call and ignore or reject them. **Verify rather than assume**: if
+either added call errors on an unused argument, drop the three from that call
+only and leave them on `chart.CumReturns`. Say in your report which of the three
+calls ended up carrying them.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
@@ -851,6 +896,28 @@ output$perf_chart <- renderPlot({
 Delete the comment above it that says the plots draw no title of their own only
 because the card header names them — it is still true, and now lives in
 `chart_performance_summary()` instead.
+
+- [ ] **Step 6b: Give the Per-Holding chart the same three colours**
+
+An earlier draft of this plan said this chart needed no code change. That was
+wrong for the reason above — it is a `chart.CumReturns` call too, so it paints
+itself white. In `portfolio_dashboard.qmd`, `output$fund_chart`, add the same
+three arguments and change nothing else:
+
+```r
+  chart.CumReturns(bt$returns[, shown, drop = FALSE],
+    wealth.index = TRUE, legend.loc = "topleft", main = "",
+    colorset = unname(cols[shown]),
+    lwd = 2, element.color = GRID_COLOR,
+    bg = SURFACE_COLOR, labels.col = INK_MUTED, grid.color = GRID_COLOR,
+    cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
+    main.timespan = FALSE)
+```
+
+Verify it the same way you verify the performance chart: render and look. If you
+want a mechanical check, write the plot to a PNG with `png::readPNG` and confirm
+the most common pixel colour is `SURFACE_COLOR` rather than `#FFFFFF` — that is
+how this defect was found, and `png` is available in this R installation.
 
 - [ ] **Step 7: Render and compare against the previous chart**
 
@@ -951,18 +1018,20 @@ git commit -m "Regenerate the dashboard screenshot for the dark theme"
 
 ## Notes for the implementer
 
-**The two charts get their colours from different places.** The Per-Holding
-chart needs no code change at all: its `colorset` comes from `bt$plan$colors`
-(so, from `SERIES_SLOTS`) and its `element.color` from `GRID_COLOR`. Both move
-in Task 2. If it still looks light after Task 2, something is wrong with the
-constants, not with the chart.
+**Both charts need the same three colour arguments**, and neither gets them for
+free from Task 2. Their `colorset` does follow `SERIES_SLOTS` automatically, but
+`bg`, `labels.col` and `grid.color` are separate `plot.xts` parameters that the
+dashboard has never passed, and their defaults are white, `#333333` and
+`darkgray`. See the block at the head of Task 4.
 
-**`bg = "transparent"` is load-bearing.** Both `renderPlot` calls pass it, which
-is why the plots inherit the card surface. This is also why the seam between
-`$viz-surface` and `SURFACE_COLOR` matters enough to test: the R side uses
-`SURFACE_COLOR` to compute calendar tints, and the CSS side paints the card the
-plot sits on. If they drift, the calendar's "neutral" cell stops matching the
-card behind it.
+**`bg = "transparent"` is a red herring.** Both `renderPlot` calls pass it, and
+it does nothing for these charts — `plot.xts` paints its own opaque plot region
+underneath. The plots do not inherit the card surface; they are painted to match
+it. That is what makes the `$viz-surface` ↔ `SURFACE_COLOR` seam load-bearing:
+the R side both computes calendar tints from `SURFACE_COLOR` and paints the
+chart background with it, while the CSS side paints the card those charts sit
+on. If the two drift, every chart grows a visible rectangle and the calendar's
+neutral cell stops matching the card behind it.
 
 **Do not add a light theme back.** The spec rejects a toggle deliberately: the
 charts render server-side and cannot see a CSS media query, so a toggle needs
