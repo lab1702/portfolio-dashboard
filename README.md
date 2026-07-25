@@ -72,8 +72,8 @@ node tools/capture-screenshot.mjs http://127.0.0.1:4455/ images/dashboard.png
 It waits for every card to actually paint (Shiny fills them over a websocket
 long after page load), pins the output to 3200x2300 so the README image never
 jumps size, and fails the run if any card is clipping content behind a
-scrollbar. Needs Node 18+ and Chrome; set `CHROME_PATH` if Chrome isn't in a
-standard location.
+scrollbar. Needs Node 22+ (for the global `WebSocket`) and Chrome; set
+`CHROME_PATH` if Chrome isn't in a standard location.
 
 ## Checking the theme
 

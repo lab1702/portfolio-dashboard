@@ -7,7 +7,7 @@
 // goes stale silently whenever the layout or a visible caption changes. This
 // script exists so retaking it is one command rather than a careful manual pass.
 //
-// No dependencies, by design: Node 18+ has a global WebSocket, so this talks the
+// No dependencies, by design: Node 22+ has a global WebSocket, so this talks the
 // Chrome DevTools Protocol directly. puppeteer/webshot2/chromote would each be a
 // download, and a screenshot tool that needs its own install is a screenshot
 // tool nobody runs.
@@ -32,6 +32,17 @@ if (!URL_ || (!CHECK_ONLY && !OUT)) {
   console.error("  e.g. node tools/capture-screenshot.mjs --check " +
                 "file:///$(pwd)/portfolio_dashboard.html");
   process.exit(64);
+}
+
+// Checked before anything else, so a wrong Node says so instead of dying with
+// "WebSocket is not defined" eight seconds later after launching Chrome. The
+// header above this file claimed Node 18 for months and nobody noticed, because
+// every machine that ran it had something far newer; CI pinned to 20 found it
+// immediately. The global landed in 21 and stabilised in 22.
+if (typeof WebSocket === "undefined") {
+  console.error(`Needs Node 22+ for the global WebSocket; this is ${process.version}.`);
+  console.error("  The CDP client here is dependency-free and relies on it.");
+  process.exit(69);
 }
 
 // 1600x1150 at device scale factor 2. Both halves matter: the viewport decides
