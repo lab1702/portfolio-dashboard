@@ -186,21 +186,32 @@ drawdown arithmetic stay in the library; only the layout glue becomes ours.
 |---|---|---|---|
 | Cumulative Return | `chart.CumReturns` | Portfolio `#ffffff`, benchmark `$viz-series-1` | `c(2.6, 1.6)` |
 | Periodic Return | `chart.BarVaR` | same pair | same |
-| Drawdown | `chart.Drawdown` | Portfolio `$viz-critical`, benchmark `$viz-muted` | same |
+| Drawdown | `chart.Drawdown` | same pair | same |
 
 `lwd` is per-series: `chart.TimeSeries.builtin` does
 `if (length(lwd) < columns) lwd <- rep(lwd, columns)`.
 
-The drawdown panel pairs one red with one grey rather than two reds. Two reds
-dark enough to stay distinct on black could not both clear 3:1 against the
-surface while keeping a usable lightness gap between them. Red-against-grey
-separates on both hue and lightness, so it survives CVD, and it says the right
-thing: the portfolio's drawdown is the subject, the benchmark's is reference.
-The panel still reads as loss because the subject line carries the loss colour.
+**All three panels use the same entity colours.** An earlier version of this
+design painted the drawdown panel red-on-grey, on the reasoning that a drawdown
+panel is a loss panel and the subject should wear the loss colour. That was
+wrong, and a reader hit it immediately: the same two series changed colour
+partway down a single chart.
 
-That panel gets no legend of its own, so line weight is what identifies the
-portfolio — consistently across all three panels, which is the same rule the
-ink follows.
+It fails for three reasons. Colour means entity identity everywhere else in this
+dashboard — the chips in Key Statistics exist to key the tables to the charts —
+so one panel using colour to mean something else forces two schemes on the
+reader at once. That panel gets no legend of its own, so repainting it left line
+weight as the only surviving identifier, which is far too quiet for the job.
+And the hue was redundant anyway: every value in a drawdown panel is ≤ 0 by
+definition and the panel is titled "Drawdown", so a categorical channel was
+being spent on what the axis and title already said.
+
+Line weight still separates subject from reference in all three panels. It is
+now reinforcement rather than the sole mechanism.
+
+Tinting the panel — a background wash or a fill under the curve — would have
+kept the loss reading without touching entity identity. `chart.Drawdown` has no
+fill option, so that needs the custom plotting this design rejected.
 
 Gridlines take `$viz-grid`; on black the current weight competes with the data.
 
