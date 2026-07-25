@@ -118,20 +118,32 @@ test_that("delta_e2000 is a metric on the cases we rely on", {
   expect_equal(delta_e2000(a, b), delta_e2000(b, a), tolerance = 1e-9)
 })
 
-test_that("simulate_cvd collapses the axis each dichromacy is blind to", {
-  # A protanope and a deuteranope cannot separate red from green; both should
-  # map a saturated red and a saturated green far closer together than a normal
-  # observer does. This is the property the palette test leans on.
-  normal <- delta_e2000(hex_to_lab("#ff0000"), hex_to_lab("#00ff00"))
-  for (ty in c("protan", "deutan")) {
-    simulated <- delta_e2000(lab_under_cvd("#ff0000", ty),
-                             lab_under_cvd("#00ff00", ty))
-    expect_lt(simulated, normal / 2)
+test_that("simulate_cvd collapses each dichromacy's own confusion pair", {
+  # One pair per type, each chosen because the simulation flattens it: a normal
+  # observer separates them easily, the simulated observer barely at all. This
+  # is the property the palette test leans on, so a simulation that quietly did
+  # nothing has to fail here.
+  #
+  # The obvious pairs do not work and are a trap. Pure red against pure green
+  # under protanopia stays 45.8 apart, because protanopia darkens red and the
+  # lightness difference survives; pure blue against pure yellow under
+  # tritanopia does not move at all, because that pair differs almost entirely
+  # in lightness. Both would be tests that assert nothing. These pairs are
+  # matched closely enough in lightness that only the confused axis separates
+  # them.
+  confusion <- list(
+    protan = c("#80c0c0", "#ffc0c0"),   # cyan/pink, the red-green axis
+    deutan = c("#80c080", "#ff8080"),   # green/salmon
+    tritan = c("#ff0000", "#ff00ff")    # red/magenta, the blue-yellow axis
+  )
+  for (ty in names(confusion)) {
+    pair <- confusion[[ty]]
+    normal <- delta_e2000(hex_to_lab(pair[1]), hex_to_lab(pair[2]))
+    simulated <- delta_e2000(lab_under_cvd(pair[1], ty),
+                             lab_under_cvd(pair[2], ty))
+    expect_gt(normal, 40)      # clearly two colours to a normal observer
+    expect_lt(simulated, 10)   # barely one to this one
   }
-  # Blue/yellow is the tritan axis, and is left alone by protan/deutan.
-  expect_lt(delta_e2000(lab_under_cvd("#0000ff", "tritan"),
-                        lab_under_cvd("#ffff00", "tritan")),
-            delta_e2000(hex_to_lab("#0000ff"), hex_to_lab("#ffff00")))
 })
 
 test_that("simulate_cvd returns a usable hex and is idempotent in gamut", {
