@@ -255,6 +255,7 @@ try {
   await evaluate(`(() => {
     const panel = document.createElement('div');
     panel.id = 'shiny-notification-panel';
+    panel.dataset.auditFixture = '1';
     panel.innerHTML =
       '<div class="shiny-notification">' +
         '<div class="shiny-notification-content">' +
@@ -292,6 +293,15 @@ try {
       });
     }
     return out;
+  })()`);
+
+  // The fixture is scaffolding, not dashboard state. Left in place it lands in
+  // the committed README image as a permanent "Downloading prices VOO" toast on
+  // a dashboard that is plainly finished downloading — which is exactly what
+  // shipped the first time this ran.
+  await evaluate(`(() => {
+    document.querySelectorAll('[data-audit-fixture]').forEach((el) => el.remove());
+    return document.querySelectorAll('[data-audit-fixture]').length === 0;
   })()`);
 
   // ── Capture ───────────────────────────────────────────────────────────────
