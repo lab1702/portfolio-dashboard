@@ -13,23 +13,29 @@ START_CAPITAL <- 10000
 # its rank — changing the symbol list never repaints the survivors.
 #
 # The portfolio is the subject of the dashboard rather than one instrument among
-# many, so it wears primary ink at the heaviest weight instead of a hue. The
-# instruments take the categorical slots in order.
+# many, so it wears primary ink at the heaviest weight instead of a hue. On a
+# black surface that extreme is white — the same rule as the light theme, the
+# other way up. White is a rank here, not a default: body ink is INK_COLOR, one
+# step down, so that the portfolio's line and figure are the only pure white on
+# the page.
 
-PORTFOLIO_INK <- "#0b0b0b"
+PORTFOLIO_INK <- "#ffffff"
 
-# Validated categorical order: worst adjacent pair is CVD dE 9.1 and
-# normal-vision dE 19.6 on the #fcfcfb card surface. The *ordering* is the
-# colourblind-safety mechanism, not decoration — re-validate before reordering
-# or extending it.
-SERIES_SLOTS <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
-                  "#e87ba4", "#008300", "#4a3aa7", "#e34948")
+# Validated categorical order for the #0f0f0f card surface: worst adjacent pair
+# is dE2000 45.6 at normal vision and 9.95 under simulated dichromacy. The
+# *ordering* is the colourblind-safety mechanism, not decoration — these eight
+# hues in the order they were first authored fail, amber against pink at dE 4.5
+# under tritanopia. test-palette.R holds the thresholds; re-run it rather than
+# trusting this comment.
+SERIES_SLOTS <- c("#4f9bf0", "#ffc53d", "#a98cff", "#ff8a4d",
+                  "#35d39a", "#ff92be", "#7ee36b", "#ff6b6b")
 
-INK_MUTED     <- "#898781"  # axis labels, captions
-GRID_COLOR    <- "#e1e0d9"  # hairline gridlines
-SURFACE_COLOR <- "#fcfcfb"  # card surface the plots sit on
-GAIN_COLOR    <- "#2a78d6"  # diverging pole: gains
-LOSS_COLOR    <- "#d03b3b"  # diverging pole: losses
+INK_COLOR     <- "#ededed"  # body ink; pure white is reserved, see above
+INK_MUTED     <- "#858585"  # axis labels, captions
+GRID_COLOR    <- "#232323"  # hairline gridlines
+SURFACE_COLOR <- "#0f0f0f"  # card surface the plots sit on
+GAIN_COLOR    <- "#4f9bf0"  # diverging pole: gains
+LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
 
 # Instruments past the eighth slot fall back to muted grey rather than a cycled
 # hue: a recycled categorical colour is indistinguishable from the entity it
@@ -97,7 +103,11 @@ tint_cap <- function(values, floor_pct = 2) {
 # the polarity; the colour only reinforces it.
 return_tint <- function(x, cap = 10) {
   if (!is.finite(x) || x == 0) return(SURFACE_COLOR)
-  weight <- 0.12 + 0.48 * min(abs(x) / cap, 1)
+  # 0.10-0.45, not the light theme's 0.12-0.60. On black the tint runs upward
+  # in luminance, so a full-weight calendar would be the brightest region on a
+  # page whose whole point is not being bright. Legibility is not the binding
+  # constraint here — even 0.60 clears 5.3:1 — restraint is.
+  weight <- 0.10 + 0.35 * min(abs(x) / cap, 1)
   pole <- grDevices::col2rgb(if (x > 0) GAIN_COLOR else LOSS_COLOR)[, 1]
   base <- grDevices::col2rgb(SURFACE_COLOR)[, 1]
   mix <- round((1 - weight) * base + weight * pole)

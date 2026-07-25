@@ -102,10 +102,14 @@ test_that("return_tint is neutral at zero and diverges by sign", {
 })
 
 test_that("return_tint deepens with magnitude and saturates at the cap", {
-  blueness <- function(x) as.numeric(grDevices::col2rgb(return_tint(x, cap = 10))[1])
-  expect_gt(blueness(1), blueness(5))    # less tint = closer to the pale surface
-  expect_gt(blueness(5), blueness(10))
-  expect_equal(blueness(10), blueness(40))  # beyond the cap, no further deepening
+  # Distance from the surface, not a single channel: the old version watched the
+  # red channel fall, which only holds when the surface is the lighter of the
+  # two. On a dark surface the tint runs the other way and that test inverted.
+  depth <- function(x) delta_e2000(hex_to_lab(SURFACE_COLOR),
+                                   hex_to_lab(return_tint(x, cap = 10)))
+  expect_lt(depth(1), depth(5))
+  expect_lt(depth(5), depth(10))
+  expect_equal(depth(10), depth(40))   # beyond the cap, no further deepening
 })
 
 test_that("tint_cap ignores outliers but never collapses to zero", {
