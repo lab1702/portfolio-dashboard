@@ -456,13 +456,17 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                        labels.col = INK_MUTED, grid.color = GRID_COLOR,
                        cex.axis = 0.85, cex.lab = 0.85)
 
-  # A drawdown panel is a loss panel, so the subject's line carries the loss
-  # colour. The benchmark takes muted ink rather than a second red: two reds
-  # far enough apart to read as two lines could not both clear 3:1 on this
-  # surface, and red-against-grey separates on lightness as well as hue.
+  # Entity colours here too, not the loss palette. This panel used to be painted
+  # red-on-grey to say "loss", which cost more than it bought: every value in a
+  # drawdown panel is <= 0 by definition and the title already reads "Drawdown",
+  # so the hue carried nothing the axis did not — while breaking the rule the
+  # rest of the dashboard keeps, that a colour names an entity and only that.
+  # The chips in Key Statistics key off that rule. Repainting the same two
+  # series mid-chart left line weight as the only thing still naming them, on
+  # the one panel that gets no legend, and readers landed on exactly that.
   chob <- chart.Drawdown(combined, main = "Drawdown",
                          event.labels = NULL, ylog = FALSE, add = TRUE,
-                         colorset = c(LOSS_COLOR, INK_MUTED), lwd = weights,
+                         colorset = series, lwd = weights,
                          element.color = GRID_COLOR, bg = SURFACE_COLOR,
                          labels.col = INK_MUTED, grid.color = GRID_COLOR,
                          cex.axis = 0.85, cex.lab = 0.85)
