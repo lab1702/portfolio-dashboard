@@ -66,9 +66,18 @@ function findChrome() {
 // A throwaway profile, never the user's: this Chrome runs with remote debugging
 // wide open, and it must not touch real cookies, sessions or extensions.
 const profileDir = mkdtempSync(join(tmpdir(), "dashboard-shot-"));
+// CI runners give Chrome no usable sandbox and a /dev/shm too small for it, so
+// both have to come off there. They stay on everywhere else: this Chrome loads
+// a local page with remote debugging wide open, and dropping its sandbox by
+// default to suit a CI box would weaken every developer's machine to fix one.
+const ciChromeFlags = process.env.CHROME_NO_SANDBOX
+  ? ["--no-sandbox", "--disable-dev-shm-usage"]
+  : [];
+
 const chrome = spawn(findChrome(), [
   "--headless=new",
   "--disable-gpu",
+  ...ciChromeFlags,
   `--remote-debugging-port=${CDP_PORT}`,
   `--user-data-dir=${profileDir}`,
   "--no-first-run",
