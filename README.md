@@ -55,7 +55,8 @@ frequency in the sidebar, then click **Run Backtest**.
 | `portfolio_core.R` | Pure logic: parsing, validation, backtest math, table builders, colour system |
 | `theme.scss` | Bootstrap/SCSS theme: surfaces, typography, value boxes, tables |
 | `tests/` | testthat suite covering the core logic |
-| `tools/capture-screenshot.mjs` | Regenerates the screenshot above (see below) |
+| `tools/capture-screenshot.mjs` | Regenerates the screenshot above, and audits computed styles (see below) |
+| `.github/workflows/checks.yml` | CI: unit tests plus the static theme check |
 
 ## Screenshot
 
@@ -101,6 +102,12 @@ node tools/capture-screenshot.mjs --check http://127.0.0.1:4455/
 
 Both forms exit non-zero on a mismatch, and a selector matching no elements
 counts as a mismatch rather than a silent pass.
+
+CI (`.github/workflows/checks.yml`) runs the unit tests and the **static** form
+on every push and pull request. It deliberately does not run the served form:
+that needs a Shiny session and live price downloads. So a rule can still pass CI
+and be wrong in the browser — run the served check yourself before trusting a
+change to `theme.scss`.
 
 ## Tests
 

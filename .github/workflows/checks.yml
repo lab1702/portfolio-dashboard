@@ -1,0 +1,73 @@
+# The theme check here is the *static* one. It renders the dashboard and audits
+# computed styles against theme.scss, which catches a rule that lost the
+# cascade — but the static page omits shiny.min.css, and that stylesheet loads
+# after the theme and can win on source order at equal specificity. A rule can
+# pass here and still be wrong in the served app; the notification styling did
+# exactly that. The served form needs a Shiny session and live Yahoo Finance
+# downloads, which does not belong on every push, so it stays manual (README).
+
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests-and-theme:
+    runs-on: ubuntu-latest
+
+    env:
+      # Runners give Chrome no usable sandbox and a small /dev/shm. This is read
+      # by tools/capture-screenshot.mjs, which keeps the sandbox on by default
+      # so a developer machine is never weakened to suit CI.
+      CHROME_NO_SANDBOX: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          # Binary packages from the public Posit package manager. Building
+          # PerformanceAnalytics and quantmod from source costs many minutes.
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          # Listed here rather than in a DESCRIPTION: this repo is a dashboard,
+          # not an R package, and adding a DESCRIPTION would invite tooling that
+          # expects package structure. `png` is test-only — tests/run_tests.R
+          # stops with a clear message if it is missing, because the test it
+          # guards is the only cover for a chart rendering completely blank.
+          packages: |
+            any::testthat
+            any::xts
+            any::PerformanceAnalytics
+            any::quantmod
+            any::shiny
+            any::htmltools
+            any::png
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Unit tests
+        run: Rscript tests/run_tests.R
+
+      # Renders the static shell. The setup chunk only loads libraries and
+      # sources portfolio_core.R, and the server chunk is registered rather than
+      # run, so this needs no network and downloads no prices.
+      - name: Render
+        run: quarto render portfolio_dashboard.qmd
+
+      # The suite validates colour *values*; nothing in it compiles the SCSS or
+      # resolves the cascade. This is the only check that does, and it is why
+      # three components once shipped correct in source and light in the browser.
+      - name: Theme check
+        run: |
+          node tools/capture-screenshot.mjs --check \
+            "file://$(pwd)/portfolio_dashboard.html"
