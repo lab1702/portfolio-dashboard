@@ -74,6 +74,34 @@ jumps size, and fails the run if any card is clipping content behind a
 scrollbar. Needs Node 18+ and Chrome; set `CHROME_PATH` if Chrome isn't in a
 standard location.
 
+## Checking the theme
+
+The test suite validates colour *values* — contrast ratios, colourblind
+separation, and that `theme.scss` and `portfolio_core.R` still agree. It cannot
+validate *outcomes*, because it never compiles the SCSS or resolves the cascade.
+That gap is real: Quarto and Shiny both ship rules with hardcoded light colours
+that outrank this theme, and three components shipped looking correct in source
+while rendering light in the browser.
+
+The same tool audits computed styles, including UI that no screenshot can
+contain — it injects Shiny's progress-notification markup and measures it:
+
+```bash
+node tools/capture-screenshot.mjs --check file://$(pwd)/portfolio_dashboard.html
+```
+
+That form needs only `quarto render` — no server, no network. **Run it against
+the served app too before trusting it.** The static page omits `shiny.min.css`,
+which loads *after* this theme and wins on source order at equal specificity;
+the notification styling passed the static check and failed the live one.
+
+```bash
+node tools/capture-screenshot.mjs --check http://127.0.0.1:4455/
+```
+
+Both forms exit non-zero on a mismatch, and a selector matching no elements
+counts as a mismatch rather than a silent pass.
+
 ## Tests
 
 The suite runs entirely on synthetic fixtures (no network needed) and covers

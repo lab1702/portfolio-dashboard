@@ -74,17 +74,6 @@ test_that("chart ink and gridlines are legible on the surface", {
             contrast_ratio(INK_MUTED, SURFACE_COLOR))
 })
 
-test_that("the zero line outranks the gridlines it is drawn among", {
-  # These were one colour until the drawdown panel's baseline disappeared into
-  # its own scaffolding. A gridline is a repeated hint; the zero line is the
-  # reference the panel's values are measured from, so it has to sit above them
-  # — and still below the muted ink, because it is not data either.
-  expect_gt(contrast_ratio(RULE_COLOR, SURFACE_COLOR),
-            contrast_ratio(GRID_COLOR, SURFACE_COLOR))
-  expect_lt(contrast_ratio(RULE_COLOR, SURFACE_COLOR),
-            contrast_ratio(INK_MUTED, SURFACE_COLOR))
-})
-
 test_that("an overflow series is not painted the colour of the axis labels", {
   # Both were INK_MUTED until labels.col started using it for tick text, at
   # which point a ninth holding's line matched the labels behind it. An

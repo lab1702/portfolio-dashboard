@@ -17,8 +17,8 @@
 // card surface that no longer matches the plot painted to match it.
 //
 // The tag is the registration. Adding a seam means adding a tag, and no count
-// is written down anywhere — an earlier version of this comment claimed "five"
-// while seven pairs were being asserted.
+// is written down anywhere — earlier versions of this comment kept drifting out
+// of step with the number of pairs actually asserted, in two files at once.
 //
 // Series hues live in portfolio_core.R and are validated there against this
 // surface. Only slot 1 crosses into CSS, as $viz-series-1, because it doubles
@@ -35,8 +35,13 @@ $viz-ink:       #ededed; // primary ink             [seam: INK_COLOR]
 $viz-ink-2:     #a6a6a6; // secondary ink
 $viz-muted:     #858585; // axis labels, captions   [seam: INK_MUTED]
 $viz-grid:      #232323; // hairline gridline       [seam: GRID_COLOR]
-$viz-rule:      #3a3a3a; // baseline / axis         [seam: RULE_COLOR]
+$viz-rule:      #3a3a3a; // input borders, table rule
 $viz-hairline:  rgba(255, 255, 255, 0.10);
+
+// One step above the card, for things that sit *on* a card rather than being
+// one: an inline code pill, a floating notification. On black, elevation only
+// runs upward, so this is the only direction available for "in front".
+$viz-raised:    #1a1a1a;
 
 // Data — categorical slot 1 doubles as the UI accent
 $viz-series-1:  #4f9bf0; //                         [seam: SERIES_SLOTS[1]]
@@ -85,8 +90,29 @@ $input-focus-border-color: $viz-series-1;
 // sidebar — 2.96:1, the same class of miss as the .bg-light value box. Ink is
 // $viz-ink, not $viz-series-1: the accent's job is marking the benchmark
 // wherever it appears, and spending it on inline code would dilute that.
-$code-bg:                 #1a1a1a; // a step above the card, so code reads as inset
+$code-bg:                 $viz-raised;
 $code-color:              $viz-ink;
+
+// The progress track is a light grey and the bar is $primary. Neither is
+// reachable from a screenshot: withProgress() paints them on every backtest,
+// over the sequential downloads, and they are gone before anything is captured.
+$progress-bg:             $viz-rule;
+$progress-bar-bg:         $viz-series-1;
+
+// A note for the next person who goes looking, because it cost an hour here.
+// The compiled CSS still declares --bs-light, --bs-tertiary-bg and
+// --bs-secondary-bg as #f8f9fa, which looks like an unconverted light layer
+// waiting to leak. It is not: grep the compiled stylesheet and var(--bs-light),
+// var(--bs-tertiary-bg) and var(--bs-secondary-bg) are read zero times. Setting
+// $light and friends here changes nothing, so those assignments were removed
+// rather than left looking load-bearing.
+//
+// Every real defect of this kind has come from a *rule* with a hardcoded
+// colour, not from that variable layer: Quarto's own
+// .quarto-dashboard .card.valuebox.bslib-card.bg-light (#f8f9fa !important),
+// Bootstrap's bare `code`, and Shiny's .shiny-notification. Rules cannot be
+// closed off in advance — the defence is the computed-style audit in
+// tools/capture-screenshot.mjs, which is why it exists.
 
 /*-- scss:rules --*/
 
@@ -238,6 +264,49 @@ $code-color:              $viz-ink;
 
   li:last-child { margin-bottom: 0; }
 }
+
+// ── Transient UI ─────────────────────────────────────────────────────────────
+//
+// A progress notification is the one component here that cannot appear in a
+// screenshot, and it went through an entire dark conversion still wearing
+// Shiny's defaults — #e8e8e8 on #333 — because every check we had looked at a
+// still image of the settled page. withProgress() paints one on every backtest,
+// over the sequential downloads, which is the longest the user ever waits and
+// the one moment they are watching a single element.
+//
+// These are Shiny's own class names, not Bootstrap's, so no variable reaches
+// them; the rules have to be written out. tools/capture-screenshot.mjs --check
+// injects this markup and asserts the computed colours, because nothing else
+// can see it.
+
+// Scoped to the panel id, and that is load-bearing rather than tidy.
+// shiny.min.css loads after this theme and sets .shiny-notification to #e8e8e8
+// on #333 at one class of specificity, so a bare .shiny-notification rule here
+// loses on source order — verified: the static page audited clean and the
+// served app still came back rgb(232,232,232). The id takes it decisively
+// without !important, and #shiny-notification-panel is where Shiny puts these
+// anyway, so the selector describes the real structure.
+#shiny-notification-panel .shiny-notification {
+  background-color: $viz-raised;
+  color: $viz-ink;
+  border: 1px solid $viz-rule;
+  border-radius: 0.375rem;
+  // Shiny ships opacity 0.85. Over a black plane that does not soften the box,
+  // it just drains the ink toward the background.
+  opacity: 1;
+}
+
+#shiny-notification-panel .shiny-notification-close {
+  color: $viz-muted;
+
+  &:hover { color: $viz-ink; }
+}
+
+// The old-style progress bar (shiny.progress.style = "old") pins a strip to the
+// top of the window with its own #eef8ff caption. This dashboard uses the
+// notification style, which is Shiny's default, so that strip is unreachable
+// today — left unstyled deliberately rather than shipping a rule nothing can
+// exercise, which is how the untested-CSS problem started.
 
 // ── Value boxes ──────────────────────────────────────────────────────────────
 //

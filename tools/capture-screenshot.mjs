@@ -17,10 +17,20 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const URL_ = process.argv[2];
-const OUT = process.argv[3];
-if (!URL_ || !OUT) {
+// Two modes. The capture mode needs the live Shiny app, because a screenshot of
+// unpainted cards is worthless. The check mode does not: the colour audit only
+// needs the markup and the stylesheet, both of which `quarto render` puts in the
+// static html. That matters because the audit is the only thing in this repo
+// that resolves the compiled cascade, and a check nobody can run without
+// standing up a server and hitting Yahoo Finance is a check nobody runs.
+const CHECK_ONLY = process.argv[2] === "--check";
+const URL_ = CHECK_ONLY ? process.argv[3] : process.argv[2];
+const OUT = CHECK_ONLY ? null : process.argv[3];
+if (!URL_ || (!CHECK_ONLY && !OUT)) {
   console.error("usage: node tools/capture-screenshot.mjs <url> <out.png>");
+  console.error("       node tools/capture-screenshot.mjs --check <url>");
+  console.error("  e.g. node tools/capture-screenshot.mjs --check " +
+                "file:///$(pwd)/portfolio_dashboard.html");
   process.exit(64);
 }
 
@@ -164,20 +174,28 @@ try {
     };
   })()`;
 
-  let ready = null;
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    try {
-      ready = await evaluate(READY);
-      if (ready && Object.values(ready).every(Boolean)) break;
-    } catch { /* page still navigating */ }
-    await sleep(1000);
+  // Static html has the markup and the stylesheet but no Shiny to fill the
+  // outputs, so waiting for them to paint would time out for nothing. The
+  // colour audit does not need them; the capture does, which is why capture
+  // mode still waits.
+  if (CHECK_ONLY) {
+    console.log("check mode: skipping readiness (outputs are not painted)");
+  } else {
+    let ready = null;
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      try {
+        ready = await evaluate(READY);
+        if (ready && Object.values(ready).every(Boolean)) break;
+      } catch { /* page still navigating */ }
+      await sleep(1000);
+    }
+    if (!ready || !Object.values(ready).every(Boolean)) {
+      console.error("readiness:", JSON.stringify(ready));
+      throw new Error("content never painted — refusing to capture empty cards");
+    }
+    console.log("readiness: all outputs painted");
   }
-  if (!ready || !Object.values(ready).every(Boolean)) {
-    console.error("readiness:", JSON.stringify(ready));
-    throw new Error("content never painted — refusing to capture empty cards");
-  }
-  console.log("readiness: all outputs painted");
 
   // Fonts and plot antialiasing settle after the data lands.
   await evaluate("document.fonts.ready.then(() => true)");
@@ -210,42 +228,93 @@ try {
   // the cascade in the browser. A selector that matches zero elements is that
   // same failure mode wearing a different face — the page changed shape and
   // nothing complained — so it counts as a mismatch, not a silent pass.
-  const WANT_BG = {
-    ".bslib-value-box.bg-primary": "rgb(31, 95, 174)", // $viz-accent-fill
-    ".bslib-value-box.bg-light":   "rgb(15, 15, 15)",  // $viz-surface
-    ".sidebar code":               "rgb(26, 26, 26)",  // $code-bg
-  };
+  // Background AND text. Checking only the background is half a contrast pair,
+  // and a regression that reverted the ink while leaving the fill would have
+  // passed — which was a real gap, not a hypothetical one.
+  const WANT = [
+    { sel: ".bslib-value-box.bg-primary", bg: "rgb(31, 95, 174)",   fg: "rgb(255, 255, 255)" },
+    { sel: ".bslib-value-box.bg-light",   bg: "rgb(15, 15, 15)",    fg: "rgb(237, 237, 237)" },
+    { sel: ".sidebar code",               bg: "rgb(26, 26, 26)",    fg: "rgb(237, 237, 237)" },
+    // Transient UI. None of it can ever appear in a screenshot, which is
+    // exactly why it went unthemed: withProgress() paints a notification on
+    // every backtest, over the slowest part of the app, and Shiny's own default
+    // for it is #e8e8e8 on #333.
+    { sel: ".shiny-notification",         bg: "rgb(26, 26, 26)",    fg: "rgb(237, 237, 237)" },
+    { sel: ".shiny-notification-close",   fg: "rgb(133, 133, 133)" },
+    { sel: ".shiny-progress-notification .progress",     bg: "rgb(58, 58, 58)"  },
+    { sel: ".shiny-progress-notification .progress-bar", bg: "rgb(79, 155, 240)" },
+  ];
+
+  // The transient elements are not in the DOM until Shiny creates them, so the
+  // audit creates them itself. This proves the stylesheet, not Shiny — the
+  // markup below mirrors what shiny.js builds for a progress notification, and
+  // if Shiny's own class names ever drift from it, the selectors here go on
+  // matching this fixture while the real thing goes unstyled. The zero-match
+  // rule below is what makes that visible: delete a class here and the audit
+  // reports the selector matching nothing rather than quietly passing.
+  await evaluate(`(() => {
+    const panel = document.createElement('div');
+    panel.id = 'shiny-notification-panel';
+    panel.innerHTML =
+      '<div class="shiny-notification">' +
+        '<div class="shiny-notification-content">' +
+          '<div class="shiny-notification-content-text">' +
+            '<div class="shiny-progress-notification">' +
+              '<div class="progress"><div class="progress-bar" style="width:40%"></div></div>' +
+              '<div class="progress-text">' +
+                '<span class="progress-message">Downloading prices</span>' +
+                '<span class="progress-detail">VOO</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="shiny-notification-close">&times;</div>' +
+      '</div>';
+    document.body.appendChild(panel);
+    return true;
+  })()`);
+
   const colorAudit = await evaluate(`(() => {
-    const want = ${JSON.stringify(WANT_BG)};
+    const want = ${JSON.stringify(WANT)};
     const out = [];
-    for (const [sel, bg] of Object.entries(want)) {
+    for (const { sel, bg, fg } of want) {
       const els = document.querySelectorAll(sel);
       if (els.length === 0) {
-        out.push({ sel, got: "(selector matched no elements)", want: bg });
+        out.push({ sel, got: "(selector matched no elements)", want: bg || fg });
         continue;
       }
       els.forEach((el) => {
-        const got = getComputedStyle(el).backgroundColor;
-        if (got !== bg) out.push({ sel, got, want: bg });
+        const s = getComputedStyle(el);
+        if (bg && s.backgroundColor !== bg)
+          out.push({ sel, prop: "background", got: s.backgroundColor, want: bg });
+        if (fg && s.color !== fg)
+          out.push({ sel, prop: "color", got: s.color, want: fg });
       });
     }
     return out;
   })()`);
 
   // ── Capture ───────────────────────────────────────────────────────────────
-  const shot = await call("Page.captureScreenshot", { format: "png" });
-  const buf = Buffer.from(shot.data, "base64");
-  writeFileSync(OUT, buf);
+  if (!CHECK_ONLY) {
+    const shot = await call("Page.captureScreenshot", { format: "png" });
+    const buf = Buffer.from(shot.data, "base64");
+    writeFileSync(OUT, buf);
 
-  // Read the dimensions back out of the PNG header rather than trusting that
-  // the emulation override took: a silently-unapplied override produces a
-  // plausible-looking image at the wrong size.
-  const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
-  console.log(`wrote ${OUT}  ${w}x${h}  ${buf.length} bytes`);
-  if (w !== WIDTH * SCALE || h !== HEIGHT * SCALE)
-    throw new Error(`expected ${WIDTH * SCALE}x${HEIGHT * SCALE}, got ${w}x${h}`);
+    // Read the dimensions back out of the PNG header rather than trusting that
+    // the emulation override took: a silently-unapplied override produces a
+    // plausible-looking image at the wrong size.
+    const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+    console.log(`wrote ${OUT}  ${w}x${h}  ${buf.length} bytes`);
+    if (w !== WIDTH * SCALE || h !== HEIGHT * SCALE)
+      throw new Error(`expected ${WIDTH * SCALE}x${HEIGHT * SCALE}, got ${w}x${h}`);
+  }
 
-  if (overflow.length) {
+  if (CHECK_ONLY) {
+    // The overflow audit measures scroll extents against painted content, and
+    // in check mode there is none, so its answer would be meaningless rather
+    // than merely uninteresting.
+    console.log("overflow audit: skipped (needs painted content)");
+  } else if (overflow.length) {
     console.error("cards clipping content:", JSON.stringify(overflow, null, 2));
     console.error("image written, but fix the clipping before committing it");
     exitCode = 2;
@@ -255,7 +324,10 @@ try {
 
   if (colorAudit.length) {
     console.error("colours lost the cascade:", JSON.stringify(colorAudit, null, 2));
-    console.error("image written, but fix the colour mismatch before committing it");
+    console.error(CHECK_ONLY
+      ? "run this against the served app too — the static html omits shiny.min.css,"
+        + " which loads after the theme and can win on source order"
+      : "image written, but fix the colour mismatch before committing it");
     exitCode = 2;
   } else {
     console.log("colour audit: every computed background matches theme.scss");
