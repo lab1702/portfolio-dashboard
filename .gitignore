@@ -3,6 +3,9 @@ portfolio_dashboard.html
 portfolio_dashboard_files/
 /.quarto/
 
+# Brainstorming companion mockups
+.superpowers/
+
 # R session artifacts
 .Rhistory
 .RData
