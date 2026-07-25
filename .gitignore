@@ -3,8 +3,11 @@ portfolio_dashboard.html
 portfolio_dashboard_files/
 /.quarto/
 
-# Brainstorming companion mockups
+# Brainstorming companion mockups, and SDD scratch
 .superpowers/
+
+# Isolated worktrees
+.worktrees/
 
 # R session artifacts
 .Rhistory
