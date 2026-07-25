@@ -10,7 +10,7 @@
 //     tables and the value boxes. It is defined in portfolio_core.R, because
 //     the chips and chart lines are painted in R.
 //
-// Five values below are duplicated from portfolio_core.R by hand. That is a
+// Six values below are duplicated from portfolio_core.R by hand. That is a
 // seam, and tests/testthat/test-palette.R asserts it: change one side and the
 // suite fails rather than the dashboard quietly rendering a card surface that
 // no longer matches the plot sitting on it.
@@ -74,6 +74,14 @@ $input-color:             $viz-ink;
 $input-border-color:      $viz-rule;
 $input-border-radius:     0.375rem;
 $input-focus-border-color: $viz-series-1;
+
+// Bootstrap's own default is a light pill (bg #f8f9fa, ink #7d12ba) that
+// nothing else in this file touches, so it rendered unchanged on the black
+// sidebar — 2.96:1, the same class of miss as the .bg-light value box. Ink is
+// $viz-ink, not $viz-series-1: the accent's job is marking the benchmark
+// wherever it appears, and spending it on inline code would dilute that.
+$code-bg:                 #1a1a1a; // a step above the card, so code reads as inset
+$code-color:              $viz-ink;
 
 /*-- scss:rules --*/
 
