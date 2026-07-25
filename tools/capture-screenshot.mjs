@@ -203,6 +203,35 @@ try {
     return out;
   })()`);
 
+  // ── Audit computed colours in the same pass ───────────────────────────────
+  // The suite validates colour *values* exhaustively (test-palette.R) and
+  // rendered *outcomes* not at all — which is how the panel titles, and then
+  // the sidebar's inline-code pill, shipped looking set in source and losing
+  // the cascade in the browser. A selector that matches zero elements is that
+  // same failure mode wearing a different face — the page changed shape and
+  // nothing complained — so it counts as a mismatch, not a silent pass.
+  const WANT_BG = {
+    ".bslib-value-box.bg-primary": "rgb(31, 95, 174)", // $viz-accent-fill
+    ".bslib-value-box.bg-light":   "rgb(15, 15, 15)",  // $viz-surface
+    ".sidebar code":               "rgb(26, 26, 26)",  // $code-bg
+  };
+  const colorAudit = await evaluate(`(() => {
+    const want = ${JSON.stringify(WANT_BG)};
+    const out = [];
+    for (const [sel, bg] of Object.entries(want)) {
+      const els = document.querySelectorAll(sel);
+      if (els.length === 0) {
+        out.push({ sel, got: "(selector matched no elements)", want: bg });
+        continue;
+      }
+      els.forEach((el) => {
+        const got = getComputedStyle(el).backgroundColor;
+        if (got !== bg) out.push({ sel, got, want: bg });
+      });
+    }
+    return out;
+  })()`);
+
   // ── Capture ───────────────────────────────────────────────────────────────
   const shot = await call("Page.captureScreenshot", { format: "png" });
   const buf = Buffer.from(shot.data, "base64");
@@ -222,6 +251,14 @@ try {
     exitCode = 2;
   } else {
     console.log("overflow audit: no card is clipping content");
+  }
+
+  if (colorAudit.length) {
+    console.error("colours lost the cascade:", JSON.stringify(colorAudit, null, 2));
+    console.error("image written, but fix the colour mismatch before committing it");
+    exitCode = 2;
+  } else {
+    console.log("colour audit: every computed background matches theme.scss");
   }
   ws.close();
 } catch (err) {

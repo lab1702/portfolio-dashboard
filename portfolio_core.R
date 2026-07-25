@@ -13,23 +13,29 @@ START_CAPITAL <- 10000
 # its rank — changing the symbol list never repaints the survivors.
 #
 # The portfolio is the subject of the dashboard rather than one instrument among
-# many, so it wears primary ink at the heaviest weight instead of a hue. The
-# instruments take the categorical slots in order.
+# many, so it wears primary ink at the heaviest weight instead of a hue. On a
+# black surface that extreme is white — the same rule as the light theme, the
+# other way up. White is a rank here, not a default: body ink is INK_COLOR, one
+# step down, so that the portfolio's line and figure are the only pure white on
+# the page.
 
-PORTFOLIO_INK <- "#0b0b0b"
+PORTFOLIO_INK <- "#ffffff"
 
-# Validated categorical order: worst adjacent pair is CVD dE 9.1 and
-# normal-vision dE 19.6 on the #fcfcfb card surface. The *ordering* is the
-# colourblind-safety mechanism, not decoration — re-validate before reordering
-# or extending it.
-SERIES_SLOTS <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
-                  "#e87ba4", "#008300", "#4a3aa7", "#e34948")
+# Validated categorical order for the #0f0f0f card surface: worst adjacent pair
+# is dE2000 45.6 at normal vision and 9.92 under simulated dichromacy. The
+# *ordering* is the colourblind-safety mechanism, not decoration — these eight
+# hues in the order they were first authored fail, amber against pink at dE 4.5
+# under tritanopia. test-palette.R holds the thresholds; re-run it rather than
+# trusting this comment.
+SERIES_SLOTS <- c("#4f9bf0", "#ffc53d", "#a98cff", "#ff8a4d",
+                  "#35d39a", "#ff92be", "#7ee36b", "#ff6b6b")
 
-INK_MUTED     <- "#898781"  # axis labels, captions
-GRID_COLOR    <- "#e1e0d9"  # hairline gridlines
-SURFACE_COLOR <- "#fcfcfb"  # card surface the plots sit on
-GAIN_COLOR    <- "#2a78d6"  # diverging pole: gains
-LOSS_COLOR    <- "#d03b3b"  # diverging pole: losses
+INK_COLOR     <- "#ededed"  # body ink; pure white is reserved, see above
+INK_MUTED     <- "#858585"  # axis labels, captions
+GRID_COLOR    <- "#232323"  # hairline gridlines
+SURFACE_COLOR <- "#0f0f0f"  # card surface the plots sit on
+GAIN_COLOR    <- "#4f9bf0"  # diverging pole: gains
+LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
 
 # Instruments past the eighth slot fall back to muted grey rather than a cycled
 # hue: a recycled categorical colour is indistinguishable from the entity it
@@ -97,7 +103,11 @@ tint_cap <- function(values, floor_pct = 2) {
 # the polarity; the colour only reinforces it.
 return_tint <- function(x, cap = 10) {
   if (!is.finite(x) || x == 0) return(SURFACE_COLOR)
-  weight <- 0.12 + 0.48 * min(abs(x) / cap, 1)
+  # 0.10-0.45, not the light theme's 0.12-0.60. On black the tint runs upward
+  # in luminance, so a full-weight calendar would be the brightest region on a
+  # page whose whole point is not being bright. Legibility is not the binding
+  # constraint here — even 0.60 clears 5.3:1 — restraint is.
+  weight <- 0.10 + 0.35 * min(abs(x) / cap, 1)
   pole <- grDevices::col2rgb(if (x > 0) GAIN_COLOR else LOSS_COLOR)[, 1]
   base <- grDevices::col2rgb(SURFACE_COLOR)[, 1]
   mix <- round((1 - weight) * base + weight * pole)
@@ -359,6 +369,109 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
     row.names = colnames(cols),
     check.names = FALSE
   )
+}
+
+# charts.PerformanceSummary forwards a single `colorset` through ... to all
+# three of its panels, so the drawdown panel cannot be coloured separately
+# through it. Its body is a little par() glue around three panel functions, so
+# this reproduces the glue and makes the three calls itself: all the drawing,
+# axis scaling, date handling and drawdown arithmetic stay in the library, and
+# only the layout becomes ours.
+#
+# The library (PerformanceAnalytics 2.1.0, default plot.engine) sets all three
+# par(mar = ...) values *before* drawing any of the three panels, not one per
+# panel as an earlier draft of this plan assumed — body(charts.PerformanceSummary)
+# is the source of truth, and each mar assignment simply overwrites the last, so
+# the net effect is oma = c(2, 0, 4, 0), mar = c(5, 4, 0, 2) for all three calls.
+# Reproduced verbatim here rather than collapsed to that one call, so this stays
+# a visible match against the library body if a future release is diffed against
+# it.
+#
+# The cost of that is a pin to the package's current stacking behaviour — if a
+# future release changes its layout, this copy will not follow. test-visuals.R
+# checks the one consequence we can check cheaply, that par() is left as found.
+#
+# Each chart.* call below returns a "replot_xts" chob rather than drawing
+# eagerly — like lattice, it only draws when printed, and a bare top-level
+# statement auto-prints while a statement inside a function body does not. The
+# three calls are add = TRUE-chained onto one chob, so printing only the last
+# one (from chart.Drawdown) replays all three panels; this was found by pixel
+# census, not by the test above, because a null device does not care whether
+# anything was actually drawn on it. The library's own body does the same
+# print() for the same reason, right before it restores par().
+chart_performance_summary <- function(combined, port_color, bench_color) {
+  op <- par(no.readonly = TRUE)
+  on.exit(par(op), add = TRUE)
+
+  series <- c(port_color, bench_color)
+
+  # The subject is drawn heavier than everything it is compared against. In the
+  # drawdown panel there is no legend, so this weight is the only thing naming
+  # which line is the portfolio — which is why it is the same in all three.
+  weights <- c(2.6, 1.6)
+
+  par(oma = c(2, 0, 4, 0), mar = c(1, 4, 4, 2))
+  par(mar = c(1, 4, 0, 2))
+  par(mar = c(5, 4, 0, 2))
+
+  # bg, labels.col and grid.color are not decoration. plot.xts paints its own
+  # plot region, defaulting to white, and renderPlot's bg = "transparent" does
+  # not reach it — so without these the chart is a white rectangle on a black
+  # card. The plot is opaque either way; it is merely painted to match.
+  #
+  # Each panel keeps its own main: chart.CumReturns/BarVaR/Drawdown draw it as
+  # an in-plot title, not the outer one charts.PerformanceSummary sets with
+  # title(main, outer = TRUE) — this function never calls that, so there is no
+  # second, card-header-duplicating title above the three panels, only the
+  # names a reader needs to tell "Cumulative Return" from "Drawdown" apart
+  # without a legend (the middle panel has none). ylab is not part of that:
+  # plot.xts renders no y-axis title regardless of what is passed, so the
+  # three panels below pass none rather than an argument that reads as a label
+  # but does nothing.
+  #
+  # main.timespan = FALSE is still suppressed, for a narrower reason: left at
+  # its default, plot.xts draws its own "start / end" header in the top-right
+  # corner of this panel — a second, ISO-formatted copy of the window the
+  # Period value box already states in fmt_month_year's words.
+  chob <- chart.CumReturns(combined, main = "Cumulative Return", xaxis = FALSE,
+                           legend.loc = "topleft", main.timespan = FALSE,
+                           wealth.index = TRUE,
+                           colorset = series, lwd = weights,
+                           element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                           labels.col = INK_MUTED, grid.color = GRID_COLOR,
+                           cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
+
+  # chart.BarVaR's own default main is paste(date.label, "Return"), where
+  # date.label comes from periodicity(x)$scale. Hardcoded here rather than
+  # derived: `combined` is always daily. compute_backtest() never resamples
+  # (no to.weekly/to.monthly), and get_prices() calls quantmod::getSymbols()
+  # with no periodicity argument, which returns Yahoo's daily series. If either
+  # of those changes, this label has to start reading periodicity(combined)
+  # the way the library does.
+  chob <- chart.BarVaR(combined, main = "Daily Return", xaxis = FALSE,
+                       methods = "none",
+                       event.labels = NULL, ylog = FALSE, add = TRUE,
+                       colorset = series, lwd = weights,
+                       element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                       labels.col = INK_MUTED, grid.color = GRID_COLOR,
+                       cex.axis = 0.85, cex.lab = 0.85)
+
+  # A drawdown panel is a loss panel, so the subject's line carries the loss
+  # colour. The benchmark takes muted ink rather than a second red: two reds
+  # far enough apart to read as two lines could not both clear 3:1 on this
+  # surface, and red-against-grey separates on lightness as well as hue.
+  chob <- chart.Drawdown(combined, main = "Drawdown",
+                         event.labels = NULL, ylog = FALSE, add = TRUE,
+                         colorset = c(LOSS_COLOR, INK_MUTED), lwd = weights,
+                         element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                         labels.col = INK_MUTED, grid.color = GRID_COLOR,
+                         cex.axis = 0.85, cex.lab = 0.85)
+
+  # The three add = TRUE calls chain onto one chob, so printing the last one
+  # replays all three panels — see the note above the function.
+  print(chob)
+
+  invisible(NULL)
 }
 
 # `top = 5` is a ceiling, not a quota: table.Drawdowns warns when the series

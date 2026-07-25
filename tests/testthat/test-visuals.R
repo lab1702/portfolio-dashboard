@@ -102,10 +102,14 @@ test_that("return_tint is neutral at zero and diverges by sign", {
 })
 
 test_that("return_tint deepens with magnitude and saturates at the cap", {
-  blueness <- function(x) as.numeric(grDevices::col2rgb(return_tint(x, cap = 10))[1])
-  expect_gt(blueness(1), blueness(5))    # less tint = closer to the pale surface
-  expect_gt(blueness(5), blueness(10))
-  expect_equal(blueness(10), blueness(40))  # beyond the cap, no further deepening
+  # Distance from the surface, not a single channel: the old version watched the
+  # red channel fall, which only holds when the surface is the lighter of the
+  # two. On a dark surface the tint runs the other way and that test inverted.
+  depth <- function(x) delta_e2000(hex_to_lab(SURFACE_COLOR),
+                                   hex_to_lab(return_tint(x, cap = 10)))
+  expect_lt(depth(1), depth(5))
+  expect_lt(depth(5), depth(10))
+  expect_equal(depth(10), depth(40))   # beyond the cap, no further deepening
 })
 
 test_that("tint_cap ignores outliers but never collapses to zero", {
@@ -200,6 +204,71 @@ test_that("the performance caption reads as a sentence for every choice", {
                "100% VOO · rebalanced monthly · benchmark SPY")
   expect_equal(perf_caption_text(1, "VOO", "none", "SPY"),
                "100% VOO · buy & hold, never rebalanced · benchmark SPY")
+})
+
+test_that("the composed performance chart draws without disturbing par()", {
+  # The chart is composed from three panel functions rather than taken whole
+  # from charts.PerformanceSummary, so that the drawdown panel can carry the
+  # loss colour while the top panel keeps the series colours. Reproducing the
+  # library's par() glue means we now own restoring it: a leaked par() would
+  # corrupt every plot drawn after this one in the same session.
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 300)
+  combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
+                             SPY       = rep(0.0005, 300)), order.by = dates)
+
+  pdf(NULL)                      # draw to a null device, not a file
+  before <- par(no.readonly = TRUE)  # this device's own defaults, not the
+                                      # previous device's — captured after
+                                      # pdf(NULL) so it is what the chart's own
+                                      # on.exit is actually restoring to
+  # par(before) first, while the null device is still current: applying it
+  # after dev.off() would land on whatever device is active next, stamping
+  # this device's defaults onto one that never had them.
+  on.exit({ par(before); dev.off() }, add = TRUE)
+
+  # Not expect_silent: the panel functions are entitled to warn about a short
+  # series or a degenerate axis, and a test that forbids that is a test that
+  # fails for reasons having nothing to do with the chart.
+  expect_no_error(chart_performance_summary(combined, PORTFOLIO_INK,
+                                            SERIES_SLOTS[1]))
+  expect_equal(par("mar"), before$mar)
+  expect_equal(par("oma"), before$oma)
+})
+
+test_that("the composed performance chart actually draws pixels, not a blank canvas", {
+  # chart.CumReturns/chart.BarVaR/chart.Drawdown return a "replot_xts" chob
+  # rather than drawing eagerly (like lattice), and only draw when printed. A
+  # bare top-level call auto-prints; a call inside a function body does not.
+  # chart_performance_summary() prints the chained chob for exactly this
+  # reason — the test above draws to a null pdf() device and would pass just
+  # as well if that print() were deleted and the chart rendered nothing at
+  # all, because a null device has no pixels to be wrong about. This test
+  # renders to a real PNG and checks that the modal colour is the card
+  # surface, not the white plot.xts paints by default — the same technique,
+  # and the same census, that caught the original blank-canvas bug.
+  skip_if_not_installed("png")
+
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 300)
+  combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
+                             SPY       = rep(0.0005, 300)), order.by = dates)
+
+  path <- tempfile(fileext = ".png")
+  on.exit(unlink(path), add = TRUE)
+  grDevices::png(path, width = 700, height = 420)
+  ok <- tryCatch({
+    chart_performance_summary(combined, PORTFOLIO_INK, SERIES_SLOTS[1])
+    TRUE
+  }, finally = grDevices::dev.off())
+  stopifnot(ok)
+
+  img <- png::readPNG(path)
+  pixels <- grDevices::rgb(img[, , 1], img[, , 2], img[, , 3])
+  modal_color <- names(sort(table(pixels), decreasing = TRUE))[1]
+
+  # Uppercase: grDevices::rgb() always emits uppercase hex, unlike our
+  # lowercase constants.
+  expect_equal(modal_color, toupper(SURFACE_COLOR))
+  expect_false(modal_color == "#FFFFFF")
 })
 
 test_that("run_problem_banner reports every message, once, or nothing at all", {

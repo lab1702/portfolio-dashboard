@@ -1,41 +1,50 @@
 /*-- scss:defaults --*/
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Portfolio dashboard theme.
+// Portfolio dashboard theme — true black.
 //
 // The colour system has exactly two jobs:
 //   · chrome — quiet, near-neutral surfaces and ink, so nothing competes with
 //     the data;
 //   · data — one validated categorical palette, shared by the charts, the
-//     tables and the value boxes. It is defined once, in portfolio_core.R, and
-//     stays there: the chips and chart lines are painted in R. Only slot 1
-//     crosses into CSS, as $viz-series-1, because it doubles as the UI accent.
+//     tables and the value boxes. It is defined in portfolio_core.R, because
+//     the chips and chart lines are painted in R.
 //
-// Series hues are the validated categorical order (adjacent-pair CVD ΔE ≥ 8,
-// normal-vision ΔE ≥ 15 on this surface). Do not add a ninth hue or reorder
-// them without re-validating: the ordering is the colourblind-safety
-// mechanism, not decoration.
+// Six values below are duplicated from portfolio_core.R by hand. That is a
+// seam, and tests/testthat/test-palette.R asserts it: change one side and the
+// suite fails rather than the dashboard quietly rendering a card surface that
+// no longer matches the plot sitting on it.
+//
+// Series hues live in portfolio_core.R and are validated there against this
+// surface. Only slot 1 crosses into CSS, as $viz-series-1, because it doubles
+// as the UI accent.
 // ─────────────────────────────────────────────────────────────────────────────
 
 $font-family-sans-serif: system-ui, -apple-system, "Segoe UI", Roboto,
   "Helvetica Neue", Arial, sans-serif !default;
 
 // Chrome
-$viz-surface:   #fcfcfb; // card surface
-$viz-plane:     #f9f9f7; // page plane behind the cards
-$viz-ink:       #0b0b0b; // primary ink
-$viz-ink-2:     #52514e; // secondary ink
-$viz-muted:     #898781; // axis labels, captions
-$viz-grid:      #e1e0d9; // hairline gridline
-$viz-rule:      #c3c2b7; // baseline / axis
-$viz-hairline:  rgba(11, 11, 11, 0.10);
+$viz-surface:   #0f0f0f; // card surface            [seam: SURFACE_COLOR]
+$viz-plane:     #000000; // page plane behind the cards
+$viz-ink:       #ededed; // primary ink             [seam: INK_COLOR]
+$viz-ink-2:     #a6a6a6; // secondary ink
+$viz-muted:     #858585; // axis labels, captions   [seam: INK_MUTED]
+$viz-grid:      #232323; // hairline gridline       [seam: GRID_COLOR]
+$viz-rule:      #3a3a3a; // baseline / axis
+$viz-hairline:  rgba(255, 255, 255, 0.10);
 
 // Data — categorical slot 1 doubles as the UI accent
-$viz-series-1:  #2a78d6;
+$viz-series-1:  #4f9bf0; //                         [seam: SERIES_SLOTS[1]]
+
+// On white one blue could be both a chart line and a filled card. On black
+// those want opposite things: the line wants to be bright, the fill wants to be
+// deep enough to hold white text without becoming the brightest object on the
+// page. Same hue, two stops.
+$viz-accent-fill: #1f5fae;
 
 // Status (reserved: never used as a series colour)
-$viz-good:      #006300;
-$viz-critical:  #d03b3b;
+$viz-good:      #45b874;
+$viz-critical:  #e05c5c; //                         [seam: LOSS_COLOR]
 
 $primary:       $viz-series-1;
 $secondary:     $viz-ink-2;
@@ -51,16 +60,28 @@ $card-cap-bg:             $viz-surface;
 $card-cap-padding-y:      0.6rem;
 $card-box-shadow:         none;
 
-$navbar-bg:               #1a1a19;
-$navbar-fg:               #ffffff;
+// The navbar was #1a1a19, which vanishes against a black plane. At the card
+// surface it reads as chrome sitting on the plane rather than as a void.
+$navbar-bg:               $viz-surface;
+$navbar-fg:               $viz-ink;
 
 $table-border-color:      $viz-grid;
 $table-cell-padding-y:    0.35rem;
 $table-cell-padding-x:    0.6rem;
 
+$input-bg:                #000000;
+$input-color:             $viz-ink;
 $input-border-color:      $viz-rule;
 $input-border-radius:     0.375rem;
 $input-focus-border-color: $viz-series-1;
+
+// Bootstrap's own default is a light pill (bg #f8f9fa, ink #7d12ba) that
+// nothing else in this file touches, so it rendered unchanged on the black
+// sidebar — 2.96:1, the same class of miss as the .bg-light value box. Ink is
+// $viz-ink, not $viz-series-1: the accent's job is marking the benchmark
+// wherever it appears, and spending it on inline code would dilute that.
+$code-bg:                 #1a1a1a; // a step above the card, so code reads as inset
+$code-color:              $viz-ink;
 
 /*-- scss:rules --*/
 
@@ -130,6 +151,50 @@ $input-focus-border-color: $viz-series-1;
     width: 100%;
     font-weight: 600;
     letter-spacing: 0.02em;
+  }
+}
+
+// The Rebalance selectInput renders through selectize.js's own bootstrap3.css
+// instead of through Bootstrap's .form-control — the other sidebar fields pick
+// up $input-bg/$input-color for free, but selectize builds its own pill and
+// dropdown markup around the real <select> rather than styling it, so none of
+// that reaches here. Left alone it is a plain white pill and a plain white
+// dropdown: the one "white box" the rest of the sidebar deliberately avoids.
+//
+// !important here is a different case from the value boxes above: selectize's
+// own rules are not !important, so matching specificity would be enough to
+// win — but doing that means chasing selectize's own state classes (`.full`
+// for the closed pill, `.input-active` for the focused one, `.active` for the
+// highlighted option), which are the plugin's internal implementation detail,
+// not something to bind styling to. One !important per property is the
+// stable target instead of the moving one.
+.selectize-input {
+  background-color: $input-bg !important;
+  color: $input-color !important;
+  border-color: $viz-rule !important;
+  box-shadow: none !important;
+
+  input { color: $input-color; } // the live search/filter text, when typed
+
+  &.focus {
+    border-color: $viz-series-1 !important;
+  }
+}
+
+.selectize-dropdown {
+  background-color: $viz-surface !important;
+  border-color: $viz-rule !important;
+
+  .option {
+    color: $viz-ink !important;
+
+    // $input-bg is black already — reusing it here rather than a bare
+    // #000000 is what clears 4.5:1 against the raw $viz-series-1 fill; white
+    // text on that same fill only reaches 2.9:1.
+    &.active {
+      background-color: $viz-series-1 !important;
+      color: $input-bg !important;
+    }
   }
 }
 
@@ -217,14 +282,34 @@ $input-focus-border-color: $viz-series-1;
   }
 }
 
-// Quiet cards
-.bslib-value-box.bg-light {
+// Quarto's dashboard format ships its own fill rule for every Bootstrap colour
+// context, scoped under body.quarto-dashboard and stacked four classes deep
+// (.card.valuebox.bslib-card.bg-*), already !important. `.bslib-value-box.bg-*`
+// carries only two classes of specificity, so against an equally-!important
+// rule it was never winning — it was losing silently, every time, and doing so
+// two different ways:
+//   · .bg-light lost outright: the "quiet" cards rendered Quarto's own
+//     near-white fill (#f8f9fa) with light ink on top of it, unreadable.
+//   · .bg-primary lost too, but invisibly, because Quarto's built-in primary
+//     fill reads from Bootstrap's $primary — which this file points at
+//     $viz-series-1 — so the losing rule still painted a plausible blue
+//     instead of visibly breaking. It was never the deep accent stop the
+//     comment below describes; that only happened to look intentional.
+// The fix is specificity, matching Quarto's own selector shape (plus the
+// .quarto-dashboard scope it renders under) rather than out-!important-ing it,
+// since both declarations end up !important regardless — dropping ours would
+// just tie and then lose on source order.
+.quarto-dashboard .card.valuebox.bslib-card.bslib-value-box.bg-light {
   background-color: $viz-surface !important;
   color: $viz-ink !important;
 }
 
-// The one filled card: growth of $10,000 is the dashboard's headline.
-.bslib-value-box.bg-primary {
+// The one filled card: growth of $10,000 is the dashboard's headline. It takes
+// the deep accent stop, not $primary — $primary is the bright line colour now,
+// and a card painted in it would be the brightest thing on the page.
+.quarto-dashboard .card.valuebox.bslib-card.bslib-value-box.bg-primary {
+  background-color: $viz-accent-fill !important;
+  color: #ffffff !important;
   border-color: transparent;
 
   .value-box-showcase .bi { opacity: 0.55; }

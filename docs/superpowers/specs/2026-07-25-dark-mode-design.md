@@ -144,7 +144,7 @@ SERIES_SLOTS <- c("#4f9bf0", "#ffc53d", "#a98cff", "#ff8a4d",
                   "#35d39a", "#ff92be", "#7ee36b", "#ff6b6b")
 ```
 
-Worst adjacent pair: ΔE2000 45.6 at normal vision, 9.95 under simulated
+Worst adjacent pair: ΔE2000 45.6 at normal vision, 9.92 under simulated
 dichromacy — both above the thresholds, and both better than the light
 theme's 19.6 / 9.1. Lowest contrast against the surface is slot 1 at 6.6:1,
 comfortably past the 3:1 floor. The ordering is load-bearing: the same eight
@@ -213,18 +213,19 @@ column, not by sign, so they would require writing real plotting code.
 ## The seam between the two colour sources
 
 `theme.scss` claims the palette is "defined once, in portfolio_core.R". That is
-not true today — five values are duplicated by hand across the two files:
+not true today — six values are duplicated by hand across the two files:
 
 | value | `theme.scss` | `portfolio_core.R` |
 |---|---|---|
 | accent | `$viz-series-1` | `SERIES_SLOTS[1]`, `GAIN_COLOR` |
 | card surface | `$viz-surface` | `SURFACE_COLOR` |
+| body ink | `$viz-ink` | `INK_COLOR` |
 | gridline | `$viz-grid` | `GRID_COLOR` |
 | muted ink | `$viz-muted` | `INK_MUTED` |
 | loss | `$viz-critical` | `LOSS_COLOR` |
 
 The duplication is stable only because nothing has touched the colours since
-they were set. This change touches all five, and the failure mode is silent: a
+they were set. This change touches all six, and the failure mode is silent: a
 card surface that no longer matches the `bg="transparent"` plot sitting on it,
 or a gridline a shade off the CSS one, both read as rendering bugs rather than
 stale constants.
