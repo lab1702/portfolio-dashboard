@@ -37,6 +37,30 @@ SURFACE_COLOR <- "#0f0f0f"  # card surface the plots sit on
 GAIN_COLOR    <- "#4f9bf0"  # diverging pole: gains
 LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
 
+# There is deliberately no separate colour for the zero line, and these charts
+# no longer pass `element.color` at all.
+#
+# The reasoning that wanted one was sound; the mechanism was not.
+# chart.TimeSeries.builtin does `addSeries(xts(rep(0, rows), ...), col =
+# element.color, on = 1)`, which reads like a zero rule you can style. It draws
+# nothing here. Set element.color to magenta and render: the canvas has zero
+# magenta pixels, while the identical probe on grid.color paints 13,731 of them.
+# Panel 1 is a wealth index around 1.0-2.5, so a line at y = 0 is off-scale and
+# clipped, and the panels added onto it never get one.
+#
+# The zero level in the drawdown panel is therefore drawn by whatever gridline
+# happens to land there, at GRID_COLOR, and distinguishing it needs plotting
+# code this design has twice declined to write. `element.color` came out rather
+# than staying in looking like the knob that controls it — the same reason
+# `ylab` came out of these calls.
+
+# An instrument past the last slot takes this rather than INK_MUTED. The two
+# were the same value until labels.col started painting axis text INK_MUTED —
+# at which point a ninth holding's line became exactly the colour of the tick
+# labels behind it. An unlabelled series should read as unlabelled, not as
+# chrome.
+OVERFLOW_COLOR <- "#9a9a9a"
+
 # Instruments past the eighth slot fall back to muted grey rather than a cycled
 # hue: a recycled categorical colour is indistinguishable from the entity it
 # repeats, which is worse than admitting the series is unlabelled.
@@ -57,7 +81,8 @@ LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
 entity_colors <- function(bench_sym, syms, drawn = syms) {
   instruments <- unique(c(bench_sym, drawn, syms))
   slots <- c(SERIES_SLOTS,
-             rep(INK_MUTED, max(0, length(instruments) - length(SERIES_SLOTS))))
+             rep(OVERFLOW_COLOR,
+                 max(0, length(instruments) - length(SERIES_SLOTS))))
   setNames(c(PORTFOLIO_INK, slots[seq_along(instruments)]),
            c("Portfolio", instruments))
 }
@@ -437,7 +462,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                            legend.loc = "topleft", main.timespan = FALSE,
                            wealth.index = TRUE,
                            colorset = series, lwd = weights,
-                           element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                           bg = SURFACE_COLOR,
                            labels.col = INK_MUTED, grid.color = GRID_COLOR,
                            cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
 
@@ -452,7 +477,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                        methods = "none",
                        event.labels = NULL, ylog = FALSE, add = TRUE,
                        colorset = series, lwd = weights,
-                       element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                       bg = SURFACE_COLOR,
                        labels.col = INK_MUTED, grid.color = GRID_COLOR,
                        cex.axis = 0.85, cex.lab = 0.85)
 
@@ -467,7 +492,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   chob <- chart.Drawdown(combined, main = "Drawdown",
                          event.labels = NULL, ylog = FALSE, add = TRUE,
                          colorset = series, lwd = weights,
-                         element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                         bg = SURFACE_COLOR,
                          labels.col = INK_MUTED, grid.color = GRID_COLOR,
                          cex.axis = 0.85, cex.lab = 0.85)
 
