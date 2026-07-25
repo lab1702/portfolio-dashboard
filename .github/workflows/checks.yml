@@ -40,7 +40,12 @@ jobs:
           # expects package structure. `png` is test-only — tests/run_tests.R
           # stops with a clear message if it is missing, because the test it
           # guards is the only cover for a chart rendering completely blank.
+          # knitr and rmarkdown are Quarto's requirement, not this project's:
+          # `quarto render` on an R document shells out to them, and a bare
+          # runner has neither even though every R developer machine does.
           packages: |
+            any::knitr
+            any::rmarkdown
             any::testthat
             any::xts
             any::PerformanceAnalytics
