@@ -10,10 +10,15 @@
 //     tables and the value boxes. It is defined in portfolio_core.R, because
 //     the chips and chart lines are painted in R.
 //
-// Six values below are duplicated from portfolio_core.R by hand. That is a
-// seam, and tests/testthat/test-palette.R asserts it: change one side and the
-// suite fails rather than the dashboard quietly rendering a card surface that
-// no longer matches the plot sitting on it.
+// Every token below tagged `[seam: NAME]` is duplicated from portfolio_core.R
+// by hand, NAME being its counterpart there. That is a seam, and
+// tests/testthat/test-palette.R reads these tags and asserts each pair: change
+// one side and the suite fails rather than the dashboard quietly rendering a
+// card surface that no longer matches the plot painted to match it.
+//
+// The tag is the registration. Adding a seam means adding a tag, and no count
+// is written down anywhere — an earlier version of this comment claimed "five"
+// while seven pairs were being asserted.
 //
 // Series hues live in portfolio_core.R and are validated there against this
 // surface. Only slot 1 crosses into CSS, as $viz-series-1, because it doubles
@@ -30,7 +35,7 @@ $viz-ink:       #ededed; // primary ink             [seam: INK_COLOR]
 $viz-ink-2:     #a6a6a6; // secondary ink
 $viz-muted:     #858585; // axis labels, captions   [seam: INK_MUTED]
 $viz-grid:      #232323; // hairline gridline       [seam: GRID_COLOR]
-$viz-rule:      #3a3a3a; // baseline / axis
+$viz-rule:      #3a3a3a; // baseline / axis         [seam: RULE_COLOR]
 $viz-hairline:  rgba(255, 255, 255, 0.10);
 
 // Data — categorical slot 1 doubles as the UI accent

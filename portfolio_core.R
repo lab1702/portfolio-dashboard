@@ -33,9 +33,25 @@ SERIES_SLOTS <- c("#4f9bf0", "#ffc53d", "#a98cff", "#ff8a4d",
 INK_COLOR     <- "#ededed"  # body ink; pure white is reserved, see above
 INK_MUTED     <- "#858585"  # axis labels, captions
 GRID_COLOR    <- "#232323"  # hairline gridlines
+RULE_COLOR    <- "#3a3a3a"  # zero line and axis; see below
 SURFACE_COLOR <- "#0f0f0f"  # card surface the plots sit on
 GAIN_COLOR    <- "#4f9bf0"  # diverging pole: gains
 LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
+
+# A gridline and a zero line are not the same object, and the charts had been
+# painting both with GRID_COLOR. A gridline is scaffolding and should barely
+# register; the zero line in the drawdown panel is the reference every value in
+# that panel is measured from, and at 1.19:1 it had stopped registering at all.
+# RULE_COLOR mirrors $viz-rule, whose own comment in theme.scss already reads
+# "baseline / axis" — the token existed for this and the R side was not using
+# it. 1.66:1: still quiet, no longer absent.
+
+# An instrument past the last slot takes this rather than INK_MUTED. The two
+# were the same value until labels.col started painting axis text INK_MUTED —
+# at which point a ninth holding's line became exactly the colour of the tick
+# labels behind it. An unlabelled series should read as unlabelled, not as
+# chrome.
+OVERFLOW_COLOR <- "#9a9a9a"
 
 # Instruments past the eighth slot fall back to muted grey rather than a cycled
 # hue: a recycled categorical colour is indistinguishable from the entity it
@@ -57,7 +73,8 @@ LOSS_COLOR    <- "#e05c5c"  # diverging pole: losses
 entity_colors <- function(bench_sym, syms, drawn = syms) {
   instruments <- unique(c(bench_sym, drawn, syms))
   slots <- c(SERIES_SLOTS,
-             rep(INK_MUTED, max(0, length(instruments) - length(SERIES_SLOTS))))
+             rep(OVERFLOW_COLOR,
+                 max(0, length(instruments) - length(SERIES_SLOTS))))
   setNames(c(PORTFOLIO_INK, slots[seq_along(instruments)]),
            c("Portfolio", instruments))
 }
@@ -437,7 +454,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                            legend.loc = "topleft", main.timespan = FALSE,
                            wealth.index = TRUE,
                            colorset = series, lwd = weights,
-                           element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                           element.color = RULE_COLOR, bg = SURFACE_COLOR,
                            labels.col = INK_MUTED, grid.color = GRID_COLOR,
                            cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
 
@@ -452,7 +469,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                        methods = "none",
                        event.labels = NULL, ylog = FALSE, add = TRUE,
                        colorset = series, lwd = weights,
-                       element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                       element.color = RULE_COLOR, bg = SURFACE_COLOR,
                        labels.col = INK_MUTED, grid.color = GRID_COLOR,
                        cex.axis = 0.85, cex.lab = 0.85)
 
@@ -467,7 +484,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   chob <- chart.Drawdown(combined, main = "Drawdown",
                          event.labels = NULL, ylog = FALSE, add = TRUE,
                          colorset = series, lwd = weights,
-                         element.color = GRID_COLOR, bg = SURFACE_COLOR,
+                         element.color = RULE_COLOR, bg = SURFACE_COLOR,
                          labels.col = INK_MUTED, grid.color = GRID_COLOR,
                          cex.axis = 0.85, cex.lab = 0.85)
 

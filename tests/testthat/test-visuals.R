@@ -25,7 +25,7 @@ test_that("entity_colors does not recycle hues past the last slot", {
   syms <- sprintf("S%02d", 1:12)
   cols <- entity_colors("SPY", syms)
   expect_equal(unname(cols[2:9]), SERIES_SLOTS)   # bench + first 7 holdings
-  expect_true(all(cols[10:13] == INK_MUTED))      # overflow, never a repeat hue
+  expect_true(all(cols[10:13] == OVERFLOW_COLOR))  # overflow, never a repeat hue
 })
 
 test_that("entity_colors folds a benchmark that is also a holding", {
@@ -57,7 +57,7 @@ test_that("every drawn holding gets a distinct real hue, wherever the weight sit
   for (nm in names(fixtures)) {
     plan  <- display_plan("SPY", syms, fixtures[[nm]])
     drawn <- plan$colors[plan$shown]
-    expect_false(any(drawn == INK_MUTED), info = nm)
+    expect_false(any(drawn == OVERFLOW_COLOR), info = nm)
     expect_false(anyDuplicated(drawn) > 0, info = nm)
   }
 })
@@ -246,8 +246,8 @@ test_that("the composed performance chart actually draws pixels, not a blank can
   # renders to a real PNG and checks that the modal colour is the card
   # surface, not the white plot.xts paints by default — the same technique,
   # and the same census, that caught the original blank-canvas bug.
-  skip_if_not_installed("png")
-
+  # No skip_if_not_installed here: run_tests.R stops up front if png is
+  # missing, so this test cannot quietly vanish on a machine that lacks it.
   dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 300)
   combined <- xts::xts(cbind(Portfolio = rep(0.0010, 300),
                              SPY       = rep(0.0005, 300)), order.by = dates)

@@ -74,6 +74,29 @@ test_that("chart ink and gridlines are legible on the surface", {
             contrast_ratio(INK_MUTED, SURFACE_COLOR))
 })
 
+test_that("the zero line outranks the gridlines it is drawn among", {
+  # These were one colour until the drawdown panel's baseline disappeared into
+  # its own scaffolding. A gridline is a repeated hint; the zero line is the
+  # reference the panel's values are measured from, so it has to sit above them
+  # — and still below the muted ink, because it is not data either.
+  expect_gt(contrast_ratio(RULE_COLOR, SURFACE_COLOR),
+            contrast_ratio(GRID_COLOR, SURFACE_COLOR))
+  expect_lt(contrast_ratio(RULE_COLOR, SURFACE_COLOR),
+            contrast_ratio(INK_MUTED, SURFACE_COLOR))
+})
+
+test_that("an overflow series is not painted the colour of the axis labels", {
+  # Both were INK_MUTED until labels.col started using it for tick text, at
+  # which point a ninth holding's line matched the labels behind it. An
+  # unlabelled series has to read as a series.
+  expect_false(identical(tolower(OVERFLOW_COLOR), tolower(INK_MUTED)))
+  expect_gte(contrast_ratio(OVERFLOW_COLOR, SURFACE_COLOR), SERIES_MIN_CONTRAST)
+  # It still has to read as "no hue assigned", so it stays achromatic: a grey
+  # that drifted toward a hue would look like a ninth categorical slot.
+  lab <- hex_to_lab(OVERFLOW_COLOR)
+  expect_lt(sqrt(lab[2]^2 + lab[3]^2), 2)
+})
+
 test_that("the diverging poles are distinguishable from each other", {
   expect_gte(delta_e2000(hex_to_lab(GAIN_COLOR), hex_to_lab(LOSS_COLOR)),
              ADJACENT_MIN_NORMAL)
@@ -85,9 +108,15 @@ test_that("the diverging poles are distinguishable from each other", {
 })
 
 # theme.scss says the palette is "defined once, in portfolio_core.R". It is not:
-# six values are duplicated across the two files by hand, and the failure mode
-# is silent — a card surface that no longer matches the transparent-background
-# plot sitting on it reads as a rendering bug, not as a stale constant.
+# several values are duplicated across the two files by hand, and the failure
+# mode is silent — a card surface that no longer matches the plot painted to
+# match it reads as a rendering bug, not as a stale constant.
+#
+# The pairs are not listed here. Each duplicated token in theme.scss carries a
+# `[seam: NAME]` tag naming its R counterpart, and this test reads those tags.
+# Listing them in both places is how the prose came to claim "five" while seven
+# pairs were asserted, twice — the count is derived now, and adding a seam is a
+# one-line tag rather than an edit in three files.
 
 scss_token <- function(name, path = "../../theme.scss") {
   lines <- readLines(path, warn = FALSE)
@@ -96,14 +125,35 @@ scss_token <- function(name, path = "../../theme.scss") {
   tolower(sub(sprintf("^\\%s:\\s*(#[0-9a-fA-F]{6})\\s*;.*$", name), "\\1", hit))
 }
 
+# Returns token name -> R constant name, read from the [seam: ...] tags.
+# The anchor on `$` matters: the block comment above the tokens documents the
+# tag format and so contains the literal string this looks for.
+scss_seams <- function(path = "../../theme.scss") {
+  lines <- grep("^\\$[a-z0-9-]+:.*\\[seam:", readLines(path, warn = FALSE),
+                value = TRUE)
+  tokens <- sub("^(\\$[a-z0-9-]+):.*$", "\\1", lines)
+  # Greedy, anchored to the line end: one tag names SERIES_SLOTS[1], so a
+  # non-greedy match stops at that inner bracket and yields unparseable code.
+  consts <- sub("^.*\\[seam:\\s*(.+)\\]\\s*$", "\\1", lines)
+  setNames(consts, tokens)
+}
+
 test_that("theme.scss and portfolio_core.R agree on every shared colour", {
-  expect_equal(scss_token("$viz-series-1"), tolower(SERIES_SLOTS[1]))
+  seams <- scss_seams()
+  # A parser that silently finds nothing would make this whole test vacuous.
+  expect_gte(length(seams), 6)
+
+  for (token in names(seams)) {
+    const <- seams[[token]]
+    # SERIES_SLOTS[1] rather than a bare name: slot 1 doubles as the UI accent.
+    value <- if (grepl("\\[", const)) eval(parse(text = const)) else get(const)
+    expect_equal(scss_token(token), tolower(value),
+                 label = sprintf("%s vs %s", token, const))
+  }
+
+  # GAIN_COLOR is the one R constant with no token of its own — it is slot 1
+  # wearing a second hat, so it is checked against the same token.
   expect_equal(scss_token("$viz-series-1"), tolower(GAIN_COLOR))
-  expect_equal(scss_token("$viz-surface"),  tolower(SURFACE_COLOR))
-  expect_equal(scss_token("$viz-grid"),     tolower(GRID_COLOR))
-  expect_equal(scss_token("$viz-muted"),    tolower(INK_MUTED))
-  expect_equal(scss_token("$viz-critical"), tolower(LOSS_COLOR))
-  expect_equal(scss_token("$viz-ink"),      tolower(INK_COLOR))
 })
 
 test_that("the filled value box holds white text", {

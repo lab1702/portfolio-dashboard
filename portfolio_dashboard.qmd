@@ -197,7 +197,7 @@ output$fund_chart <- renderPlot({
   chart.CumReturns(bt$returns[, shown, drop = FALSE],
     wealth.index = TRUE, legend.loc = "topleft", main = "",
     colorset = unname(cols[shown]),
-    lwd = 2, element.color = GRID_COLOR,
+    lwd = 2, element.color = RULE_COLOR,
     bg = SURFACE_COLOR, labels.col = INK_MUTED, grid.color = GRID_COLOR,
     cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85,
     main.timespan = FALSE)
