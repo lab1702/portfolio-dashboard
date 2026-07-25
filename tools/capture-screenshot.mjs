@@ -95,7 +95,17 @@ const chrome = spawn(findChrome(), [
   "--no-default-browser-check",
   "--hide-scrollbars",   // a scrollbar in the capture reads as a design element
   "about:blank",
-], { stdio: "ignore" });
+  // stderr is piped, not ignored: without it a Chrome that dies on startup and
+  // a Chrome that is merely slow are the same event — "never opened a CDP
+  // port" — and the actual reason is thrown away. It has to be consumed, or a
+  // full pipe buffer would block the process it is diagnosing.
+], { stdio: ["ignore", "ignore", "pipe"] });
+
+const chromeStderr = [];
+chrome.stderr.on("data", (d) => chromeStderr.push(d.toString()));
+
+let chromeExit = null;
+chrome.on("exit", (code, signal) => { chromeExit = { code, signal }; });
 
 let exitCode = 0;
 
@@ -116,13 +126,24 @@ process.on("exit", cleanup);
 
 try {
   // ── Connect ───────────────────────────────────────────────────────────────
+  // 60s, not the 15s this used to allow. A CI runner starting Chrome cold blew
+  // through the old ceiling on a push whose only change was a comment — and a
+  // check that fails at random gets ignored, which is worse than not having it.
+  // Locally this costs nothing: the loop exits as soon as the port answers.
+  const connectDeadline = Date.now() + 60_000;
   let version = null;
-  for (let i = 0; i < 30 && !version; i++) {
+  while (!version && !chromeExit && Date.now() < connectDeadline) {
     try {
       version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
     } catch { await sleep(500); }
   }
-  if (!version) throw new Error(`Chrome never opened a CDP port on ${CDP_PORT}`);
+  if (!version) {
+    const why = chromeExit
+      ? `Chrome exited before listening (code ${chromeExit.code}, signal ${chromeExit.signal})`
+      : `Chrome never opened a CDP port on ${CDP_PORT} within 60s`;
+    const said = chromeStderr.join("").trim();
+    throw new Error(said ? `${why}\n${said}` : why);
+  }
 
   const ws = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
