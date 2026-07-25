@@ -66,7 +66,7 @@ plane rather than as a void.
 ### Ink is `#ededed`, not white
 
 Pure white on pure black is the harshest pairing available, and this dashboard
-is meant to be sat in front of. `#ededed` on `#0f0f0f` is 15.4:1, well past any
+is meant to be sat in front of. `#ededed` on `#0f0f0f` is 16.4:1, well past any
 threshold that matters.
 
 Actual `#ffffff` is then reserved for one job: the portfolio's own line and its
@@ -78,7 +78,7 @@ every other series steps down — carried across the inversion.
 
 `#898781` on `#fcfcfb` is 3.3:1, under AA for the 0.72rem captions and axis
 labels it is used on. Inverting it faithfully would carry that shortfall
-across. `#858585` on `#0f0f0f` is 5.1:1.
+across. `#858585` on `#0f0f0f` is 5.2:1.
 
 ### The accent splits into two stops
 
@@ -87,7 +87,7 @@ black those want opposite things: the line wants to be bright, the fill wants
 to be deep enough to hold white text without becoming the brightest object on
 screen.
 
-- `$viz-series-1: #4f9bf0` — chart lines, chips, links, focus rings (6.5:1 on surface)
+- `$viz-series-1: #4f9bf0` — chart lines, chips, links, focus rings (6.6:1 on surface)
 - `$viz-accent-fill: #1f5fae` — the one filled value box (6.4:1 for white text)
 
 Same hue, two stops. `$primary` maps to `$viz-series-1`; the `.bslib-value-box.bg-primary`
@@ -135,17 +135,40 @@ Thresholds 2 and 3 are the ones the current comments already claim. The bar is
 unchanged; only the surface moves. Ordering remains the colourblind-safety
 mechanism, so the constraint is on *adjacent* pairs.
 
+**Derived, and confirmed feasible.** Eight hues were selected and then ordered
+by exhaustive search over all 5040 permutations of slots 2–8 (slot 1 pinned),
+maximising the CVD floor:
+
+```r
+SERIES_SLOTS <- c("#4f9bf0", "#ffc53d", "#a98cff", "#ff8a4d",
+                  "#35d39a", "#ff92be", "#7ee36b", "#ff6b6b")
+```
+
+Worst adjacent pair: ΔE2000 45.6 at normal vision, 9.95 under simulated
+dichromacy — both above the thresholds, and both better than the light
+theme's 19.6 / 9.1. Lowest contrast against the surface is slot 1 at 6.6:1,
+comfortably past the 3:1 floor. The ordering is load-bearing: the same eight
+hues in their originally authored order fail, with amber against pink at
+ΔE 4.5 under tritanopia.
+
 `PORTFOLIO_INK` becomes `#ffffff`. The overflow colour past slot 8 becomes
 `INK_MUTED` (`#858585`), preserving today's behaviour: an unlabelled series is
 admitted as unlabelled rather than given a recycled hue.
 
-### The tint ramp needs re-tuning, not re-colouring
+### The tint ramp is re-tuned for restraint, not for legibility
 
-`return_tint()` mixes from `SURFACE_COLOR` toward a pole at weight 0.12–0.60.
-That ramp was tuned so dark ink stays readable over a pale tint. Inverted, the
-same weights raise cell luminance toward a bright pole while the ink is now
-light, so the deepest cells are where legibility breaks. The ramp gets new
-bounds, chosen so that assertion group 2 below passes.
+An earlier draft of this spec claimed the ramp would break legibility when
+inverted. Measured, it does not: at the existing maximum weight of 0.60 the
+deepest cells are `#356396` and `#8c3d3d`, which hold 5.3:1 and 6.3:1 against
+`$viz-ink`. The existing 0.12–0.60 bounds would pass every contrast assertion
+unchanged.
+
+The ramp still moves, for a different reason. On black the tint runs *upward*
+in luminance, so a 12-column grid of monthly returns at full weight becomes the
+brightest region on the page — which is the complaint this whole change exists
+to answer. Bounds become **0.10–0.45**, keeping the calendar quiet. Assertion
+group 2 below stays in the suite regardless, since it is the constraint that
+stops a future widening of the ramp from going unnoticed.
 
 ## The charts
 
@@ -254,14 +277,11 @@ before the change is committed. Fallback: keep `charts.PerformanceSummary`,
 accept a single `colorset` across all three panels, and lose the red drawdown
 panel. Everything else in this design is unaffected.
 
-**Eight hues may not fit the constraints on black.** Black compresses the
-usable range: every slot must be light enough to clear 3:1, which crowds the
-slots together and makes the ≥8 CVD floor harder than it was on white. If eight
-do not fit, the thresholds are not to be quietly relaxed — the question comes
-back for a decision. It cascades: `top_holdings()` defaults to
-`length(SERIES_SLOTS) - 1L`, and the Per-Holding caption prints the slot count,
-so dropping to seven changes what the dashboard says about itself, and `README.md`
-line 29 with it.
+**~~Eight hues may not fit the constraints on black.~~ Retired during
+planning.** Eight hues were derived and validated before the plan was written;
+see the palette section. The slot count is unchanged at eight, so
+`top_holdings()`, the Per-Holding caption and `README.md` line 29 all stand as
+they are.
 
 **A pinned dependency on package internals.** Reproducing the `par()` glue ties
 the performance chart to `charts.PerformanceSummary`'s current stacking
