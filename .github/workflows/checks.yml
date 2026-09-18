@@ -68,7 +68,9 @@ jobs:
           node-version: "22"
 
       - name: Unit tests
-        run: Rscript tests/run_tests.R
+        run: |
+          Rscript tests/run_tests.R
+          node --test tests/*.test.mjs
 
       # Renders the static shell. The setup chunk only loads libraries and
       # sources portfolio_core.R, and the server chunk is registered rather than

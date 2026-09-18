@@ -78,3 +78,11 @@ test_that("weights normalize from any scale", {
   expect_equal(sum(normalize_weights(c(7, 11, 13))), 1)
   expect_equal(normalize_weights(c(1, 0)), c(1, 0))
 })
+
+test_that("finite weights retain their proportions when their total overflows", {
+  wts <- parse_weights("1e308, 1e308, 0")
+  expect_length(portfolio_input_errors(c("A", "B", "C"), wts, "SPY", 5), 0)
+  expect_equal(normalize_weights(wts), c(0.5, 0.5, 0))
+  expect_equal(normalize_weights(c(1e308, 5e307, 5e307)), c(0.5, 0.25, 0.25))
+  expect_equal(normalize_weights(c(1e-308, 2e-308)), c(1 / 3, 2 / 3))
+})

@@ -85,7 +85,9 @@ that outrank this theme, and three components shipped looking correct in source
 while rendering light in the browser.
 
 The same tool audits computed styles, including UI that no screenshot can
-contain — it injects Shiny's progress-notification markup and measures it:
+contain — it injects Shiny's progress-notification markup and measures it.
+It also checks value-box titles and every comparison state for AA text
+contrast after compositing opacity:
 
 ```bash
 node tools/capture-screenshot.mjs --check file://$(pwd)/portfolio_dashboard.html
@@ -117,6 +119,7 @@ invariants such as CAGR-vs-growth consistency and sampling-grid invariance:
 
 ```bash
 Rscript tests/run_tests.R
+node --test tests/*.test.mjs
 ```
 
 ## Disclaimer

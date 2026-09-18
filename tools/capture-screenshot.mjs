@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { waitForChromeEndpoint } from "./chrome-endpoint.mjs";
 
 // Two modes. The capture mode needs the live Shiny app, because a screenshot of
 // unpainted cards is worthless. The check mode does not: the colour audit only
@@ -51,7 +52,6 @@ if (typeof WebSocket === "undefined") {
 // Changing either changes the committed image's dimensions, so the README image
 // would visibly jump size between commits.
 const WIDTH = 1600, HEIGHT = 1150, SCALE = 2;
-const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const READY_TIMEOUT_MS = 180_000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -76,6 +76,7 @@ function findChrome() {
 
 // A throwaway profile, never the user's: this Chrome runs with remote debugging
 // wide open, and it must not touch real cookies, sessions or extensions.
+const chromePath = findChrome();
 const profileDir = mkdtempSync(join(tmpdir(), "dashboard-shot-"));
 // CI runners give Chrome no usable sandbox and a /dev/shm too small for it, so
 // both have to come off there. They stay on everywhere else: this Chrome loads
@@ -85,11 +86,11 @@ const ciChromeFlags = process.env.CHROME_NO_SANDBOX
   ? ["--no-sandbox", "--disable-dev-shm-usage"]
   : [];
 
-const chrome = spawn(findChrome(), [
+const chrome = spawn(chromePath, [
   "--headless=new",
   "--disable-gpu",
   ...ciChromeFlags,
-  `--remote-debugging-port=${CDP_PORT}`,
+  "--remote-debugging-port=0",
   `--user-data-dir=${profileDir}`,
   "--no-first-run",
   "--no-default-browser-check",
@@ -100,12 +101,6 @@ const chrome = spawn(findChrome(), [
   // port" — and the actual reason is thrown away. It has to be consumed, or a
   // full pipe buffer would block the process it is diagnosing.
 ], { stdio: ["ignore", "ignore", "pipe"] });
-
-const chromeStderr = [];
-chrome.stderr.on("data", (d) => chromeStderr.push(d.toString()));
-
-let chromeExit = null;
-chrome.on("exit", (code, signal) => { chromeExit = { code, signal }; });
 
 let exitCode = 0;
 
@@ -126,26 +121,7 @@ process.on("exit", cleanup);
 
 try {
   // ── Connect ───────────────────────────────────────────────────────────────
-  // 60s, not the 15s this used to allow. A CI runner starting Chrome cold blew
-  // through the old ceiling on a push whose only change was a comment — and a
-  // check that fails at random gets ignored, which is worse than not having it.
-  // Locally this costs nothing: the loop exits as soon as the port answers.
-  const connectDeadline = Date.now() + 60_000;
-  let version = null;
-  while (!version && !chromeExit && Date.now() < connectDeadline) {
-    try {
-      version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();
-    } catch { await sleep(500); }
-  }
-  if (!version) {
-    const why = chromeExit
-      ? `Chrome exited before listening (code ${chromeExit.code}, signal ${chromeExit.signal})`
-      : `Chrome never opened a CDP port on ${CDP_PORT} within 60s`;
-    const said = chromeStderr.join("").trim();
-    throw new Error(said ? `${why}\n${said}` : why);
-  }
-
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
+  const ws = new WebSocket(await waitForChromeEndpoint(chrome));
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
 
   let nextId = 1;
@@ -313,6 +289,20 @@ try {
         '<div class="shiny-notification-close">&times;</div>' +
       '</div>';
     document.body.appendChild(panel);
+
+    // Exercise every comparison state even when the static page has no values
+    // or the live portfolio happens to outperform its benchmark. Append outside
+    // the reactive output so an arriving Shiny update cannot remove the fixture.
+    const value = document.querySelector('.bslib-value-box.bg-light .value-box-value');
+    if (!value) throw new Error('No value box found for the contrast fixture');
+    const note = document.createElement('span');
+    note.className = 'vb-note';
+    note.dataset.auditFixture = '1';
+    note.innerHTML = '<span class="contrast-sample">Avg. yearly growth</span> ' +
+      '<span class="contrast-sample delta-good">▲ 1.0 pts</span> ' +
+      '<span class="contrast-sample delta-bad">▼ 1.0 pts</span> ' +
+      '<span class="contrast-sample delta-muted">n/a</span>';
+    value.appendChild(note);
     return true;
   })()`);
 
@@ -334,6 +324,37 @@ try {
       });
     }
     return out;
+  })()`);
+
+  // getComputedStyle().color does not include opacity. Composite the text
+  // through its transparent ancestors onto the solid card before testing AA.
+  const contrastAudit = await evaluate(`(() => {
+    const rgb = (color) => color.match(/[\\d.]+/g).map(Number);
+    const luminance = (channels) => channels.slice(0, 3).map((c) => {
+      c /= 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const selectors = ['.bslib-value-box .value-box-title',
+                       '[data-audit-fixture] .contrast-sample'];
+    const failures = [];
+    for (const sel of selectors) {
+      const els = document.querySelectorAll(sel);
+      if (!els.length) failures.push({ sel, error: 'selector matched no elements' });
+      for (const el of els) {
+        const card = el.closest('.bslib-value-box');
+        const bg = rgb(getComputedStyle(card).backgroundColor);
+        const fg = rgb(getComputedStyle(el).color);
+        let alpha = fg[3] ?? 1;
+        for (let node = el; node && node !== card; node = node.parentElement)
+          alpha *= Number(getComputedStyle(node).opacity);
+        const composite = fg.slice(0, 3).map((c, i) => alpha * c + (1 - alpha) * bg[i]);
+        const light = luminance(composite), dark = luminance(bg);
+        const ratio = (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05);
+        if (ratio < 4.5)
+          failures.push({ sel, text: el.textContent.trim(), contrast: ratio, minimum: 4.5 });
+      }
+    }
+    return failures;
   })()`);
 
   // The fixture is scaffolding, not dashboard state. Left in place it lands in
@@ -382,6 +403,12 @@ try {
     exitCode = 2;
   } else {
     console.log("colour audit: every computed background matches theme.scss");
+  }
+  if (contrastAudit.length) {
+    console.error("text below AA contrast:", JSON.stringify(contrastAudit, null, 2));
+    exitCode = 2;
+  } else {
+    console.log("contrast audit: value-box titles and notes pass AA after opacity");
   }
   ws.close();
 } catch (err) {

@@ -200,7 +200,12 @@ portfolio_input_errors <- function(syms, wts, bench, years) {
   )
 }
 
-normalize_weights <- function(wts) wts / sum(wts)
+normalize_weights <- function(wts) {
+  # Validation guarantees finite, nonnegative values and at least one positive
+  # weight. Scale first so a valid total cannot overflow to Inf.
+  scaled <- wts / max(wts)
+  scaled / sum(scaled)
+}
 
 # Every expected failure reports once, in the sidebar, beneath the button that
 # triggered it. The dashboard used to raise these through validate(), which
