@@ -31,6 +31,9 @@ Dividends are reinvested (adjusted prices). If a fund's history is
 shorter than the requested window, the analysis is trimmed to the
 common date range.
 
+Holdings and benchmark must have matching trading dates within that range.
+For crypto, use a daily-traded benchmark.
+
 Weights are relative and normalized automatically — e.g. weights
 `1, 2` allocate 33% and 67%.
 
@@ -99,9 +102,9 @@ attempt <- reactive({
   # one-column result. That is a guarantee two edits away from not holding.
   prices <- do.call(merge, unname(raw))
   colnames(prices) <- all_syms
-  prices <- na.omit(prices)
-  if (nrow(prices) <= 30)
-    return(list(errors = "Not enough overlapping history for these symbols."))
+  history <- prepare_price_history(prices)
+  if (length(history$errors)) return(history)
+  prices <- history$prices
 
   # Selection and colour are settled once, here, so every card below is drawing
   # from the same plan rather than each re-deriving its own.

@@ -362,8 +362,34 @@ fund_chart_alt <- function(returns, shown) {
 # through sanitize.text.function, which is identity here, so the span survives.
 CHIP_COLUMN_HEADER <- '<span class="visually-hidden">Series</span>'
 
-# Everything downstream of the price download. `prices` is a merged, na.omit'd
-# xts of adjusted prices whose columns are named by symbol; `wts` is already
+prepare_price_history <- function(prices) {
+  insufficient <- list(errors = "Not enough overlapping history for these symbols.")
+  if (!NROW(prices) || !NCOL(prices)) return(insufficient)
+
+  # Trim only the ends of each instrument's available history. Dropping every
+  # incomplete row would also remove crypto weekends against a stock benchmark,
+  # hiding genuine returns and drawdowns inside the shared date range.
+  bounds <- vapply(seq_len(NCOL(prices)), function(i) {
+    valid <- which(!is.na(prices[, i]))
+    if (!length(valid)) c(NA_integer_, NA_integer_)
+    else c(valid[1], valid[length(valid)])
+  }, integer(2))
+  if (anyNA(bounds)) return(insufficient)
+  first <- max(bounds[1, ])
+  last <- min(bounds[2, ])
+  if (last - first + 1 <= 30) return(insufficient)
+  common <- prices[first:last, , drop = FALSE]
+  if (anyNA(common))
+    return(list(errors = paste(
+      "Some prices are missing within the shared history.",
+      "Use holdings and a benchmark with matching trading dates;",
+      "for example, use a daily-traded benchmark for crypto.",
+      "Missing dates cannot be dropped without changing returns and risk.")))
+  list(prices = common)
+}
+
+# Everything downstream of price preparation. `prices` is a complete xts of
+# adjusted prices whose columns are named by symbol; `wts` is already
 # normalized to fractions.
 compute_backtest <- function(prices, syms, wts, bench_sym, rebal) {
   returns <- na.omit(Return.calculate(prices))

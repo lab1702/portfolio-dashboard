@@ -12,7 +12,10 @@ Yahoo Finance.
   (`^GSPC`), international listings. Up to 25 symbols and 30 years of history
   per run; each symbol costs one sequential download, so the caps are what keep
   the wait bounded. If a fund's history is shorter than the requested window,
-  the analysis is trimmed to the common date range.
+  the analysis is trimmed to the common date range. Holdings and benchmark
+  must have matching trading dates within that range: use a daily-traded
+  benchmark for crypto. Incompatible calendars or missing quotes report an
+  error instead of silently dropping observations and understating risk.
 - **Free-scale weights** — weights are relative and normalized automatically:
   `1, 2` allocates ⅓ / ⅔, `40, 30, 30` works as percentages.
 - **Rebalancing** — monthly, quarterly, yearly, or buy & hold.
