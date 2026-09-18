@@ -179,13 +179,17 @@ three of its panels, so per-panel colour is unreachable through it. Its body is
 roughly fifteen lines of `par()` glue around three calls to `chart.CumReturns`,
 `chart.BarVaR` and `chart.Drawdown` with `add=TRUE`. A new
 `chart_performance_summary()` in `portfolio_core.R` reproduces that glue and
-makes the three calls itself. All drawing, axis scaling, date handling and
-drawdown arithmetic stay in the library; only the layout glue becomes ours.
+makes the panel calls itself. The daily-return panel uses `xts::addSeries`
+directly: `chart.BarVaR` plots only the first column, even with `methods="none"`.
+The xts bar primitive also plots one column, so add the benchmark and portfolio
+separately to the same panel, scaling its y axis to both series.
+All drawing, axis scaling, date handling and drawdown arithmetic stay in the
+libraries; only the layout glue becomes ours.
 
 | panel | function | colours | `lwd` |
 |---|---|---|---|
 | Cumulative Return | `chart.CumReturns` | Portfolio `#ffffff`, benchmark `$viz-series-1` | `c(2.6, 1.6)` |
-| Periodic Return | `chart.BarVaR` | same pair | same |
+| Daily Return | two `xts::addSeries(type="h")` calls | same pair | fixed library bar width |
 | Drawdown | `chart.Drawdown` | same pair | same |
 
 `lwd` is per-series: `chart.TimeSeries.builtin` does
@@ -206,8 +210,9 @@ And the hue was redundant anyway: every value in a drawdown panel is ≤ 0 by
 definition and the panel is titled "Drawdown", so a categorical channel was
 being spent on what the axis and title already said.
 
-Line weight still separates subject from reference in all three panels. It is
-now reinforcement rather than the sole mechanism.
+Line weight separates subject from reference in the cumulative-return and
+drawdown panels. The daily bars have the library's fixed width; draw the
+portfolio last so it remains visible when the series overlap.
 
 Tinting the panel — a background wash or a fill under the curve — would have
 kept the loss reading without touching entity identity. `chart.Drawdown` has no
@@ -218,8 +223,8 @@ Gridlines take `$viz-grid`; on black the current weight competes with the data.
 The Per-Holding chart stays a plain `chart.CumReturns` call, with the new
 palette and `element.color`. Nothing structural.
 
-Sign-split return bars were considered and rejected: `chart.BarVaR` colours by
-column, not by sign, so they would require writing real plotting code.
+Return bars use entity colours rather than sign colours, consistently with
+the other two panels.
 
 ## The seam between the two colour sources
 

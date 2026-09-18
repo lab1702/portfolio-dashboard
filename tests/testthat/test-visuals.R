@@ -271,6 +271,30 @@ test_that("the composed performance chart actually draws pixels, not a blank can
   expect_false(modal_color == "#FFFFFF")
 })
 
+test_that("daily-return panel paints both the portfolio and benchmark", {
+  dates <- seq(as.Date("2021-01-04"), by = "day", length.out = 100)
+  combined <- xts::xts(cbind(Portfolio = rep(c(0.004, -0.003), 50),
+                             BEN = rep(c(0.02, -0.01), 50)), order.by = dates)
+  path <- tempfile(fileext = ".png")
+  on.exit(unlink(path), add = TRUE)
+  grDevices::png(path, width = 900, height = 700)
+  tryCatch(chart_performance_summary(combined, PORTFOLIO_INK, SERIES_SLOTS[1]),
+           finally = grDevices::dev.off())
+
+  # This crop sits inside the middle panel of the fixed three-panel layout,
+  # excluding its axes, title and the other panels' correctly coloured lines.
+  # Benchmark bars extend beyond portfolio bars on this fixture, so both must
+  # be visible. A larger shared y range alone does not satisfy the assertion.
+  middle <- png::readPNG(path)[427:490, 100:800, 1:3]
+  count_ink <- function(color) {
+    channels <- as.numeric(grDevices::col2rgb(color)) / 255
+    close <- abs(sweep(middle, 3, channels, "-")) < 0.05
+    sum(close[, , 1] & close[, , 2] & close[, , 3])
+  }
+  expect_gt(count_ink(SERIES_SLOTS[1]), 100)
+  expect_gt(count_ink(PORTFOLIO_INK), 100)
+})
+
 test_that("run_problem_banner reports every message, once, or nothing at all", {
   expect_null(run_problem_banner(character(0)))
   expect_null(run_problem_banner(NULL))

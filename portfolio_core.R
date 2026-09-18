@@ -404,9 +404,10 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
 # charts.PerformanceSummary forwards a single `colorset` through ... to all
 # three of its panels, so the drawdown panel cannot be coloured separately
 # through it. Its body is a little par() glue around three panel functions, so
-# this reproduces the glue and makes the three calls itself: all the drawing,
-# axis scaling, date handling and drawdown arithmetic stay in the library, and
-# only the layout becomes ours.
+# this reproduces the glue and makes the panel calls itself. The daily panel
+# uses xts::addSeries directly because chart.BarVaR discards every column after
+# the first, even with methods = "none". Drawing, axis scaling, date handling
+# and drawdown arithmetic stay in the libraries.
 #
 # The library (PerformanceAnalytics 2.1.0, default plot.engine) sets all three
 # par(mar = ...) values *before* drawing any of the three panels, not one per
@@ -421,10 +422,10 @@ build_stats_table <- function(port, returns, bench_sym, syms, scale) {
 # future release changes its layout, this copy will not follow. test-visuals.R
 # checks the one consequence we can check cheaply, that par() is left as found.
 #
-# Each chart.* call below returns a "replot_xts" chob rather than drawing
+# Each panel call below returns a "replot_xts" chob rather than drawing
 # eagerly — like lattice, it only draws when printed, and a bare top-level
 # statement auto-prints while a statement inside a function body does not. The
-# three calls are add = TRUE-chained onto one chob, so printing only the last
+# calls are chained onto one chob, so printing only the last
 # one (from chart.Drawdown) replays all three panels; this was found by pixel
 # census, not by the test above, because a null device does not care whether
 # anything was actually drawn on it. The library's own body does the same
@@ -437,7 +438,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
 
   # The subject is drawn heavier than everything it is compared against. In the
   # drawdown panel there is no legend, so this weight is the only thing naming
-  # which line is the portfolio — which is why it is the same in all three.
+  # which line is the portfolio. Daily bars use xts's fixed-width primitive.
   weights <- c(2.6, 1.6)
 
   par(oma = c(2, 0, 4, 0), mar = c(1, 4, 4, 2))
@@ -449,7 +450,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
   # not reach it — so without these the chart is a white rectangle on a black
   # card. The plot is opaque either way; it is merely painted to match.
   #
-  # Each panel keeps its own main: chart.CumReturns/BarVaR/Drawdown draw it as
+  # Each panel keeps its own main: chart.CumReturns/addSeries/Drawdown draw it as
   # an in-plot title, not the outer one charts.PerformanceSummary sets with
   # title(main, outer = TRUE) — this function never calls that, so there is no
   # second, card-header-duplicating title above the three panels, only the
@@ -471,20 +472,14 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                            labels.col = INK_MUTED, grid.color = GRID_COLOR,
                            cex.axis = 0.85, cex.legend = 0.9, cex.lab = 0.85)
 
-  # chart.BarVaR's own default main is paste(date.label, "Return"), where
-  # date.label comes from periodicity(x)$scale. Hardcoded here rather than
-  # derived: `combined` is always daily. compute_backtest() never resamples
-  # (no to.weekly/to.monthly), and get_prices() calls quantmod::getSymbols()
-  # with no periodicity argument, which returns Yahoo's daily series. If either
-  # of those changes, this label has to start reading periodicity(combined)
-  # the way the library does.
-  chob <- chart.BarVaR(combined, main = "Daily Return", xaxis = FALSE,
-                       methods = "none",
-                       event.labels = NULL, ylog = FALSE, add = TRUE,
-                       colorset = series, lwd = weights,
-                       bg = SURFACE_COLOR,
-                       labels.col = INK_MUTED, grid.color = GRID_COLOR,
-                       cex.axis = 0.85, cex.lab = 0.85)
+  # Both chart.BarVaR and xts's bar primitive use only the first column.
+  # Draw each separately on panel 2, with a shared range and the portfolio
+  # on top. Bar width is fixed by xts; the other panels use the weights above.
+  chob <- xts::addSeries(combined[, 2, drop = FALSE], main = "Daily Return",
+                         type = "h", col = bench_color, lend = "butt",
+                         ylim = range(c(0, combined), na.rm = TRUE))
+  chob <- xts::addSeries(combined[, 1, drop = FALSE], on = 2,
+                         type = "h", col = port_color, lend = "butt")
 
   # Entity colours here too, not the loss palette. This panel used to be painted
   # red-on-grey to say "loss", which cost more than it bought: every value in a
@@ -501,7 +496,7 @@ chart_performance_summary <- function(combined, port_color, bench_color) {
                          labels.col = INK_MUTED, grid.color = GRID_COLOR,
                          cex.axis = 0.85, cex.lab = 0.85)
 
-  # The three add = TRUE calls chain onto one chob, so printing the last one
+  # The panel calls chain onto one chob, so printing the last one
   # replays all three panels — see the note above the function.
   print(chob)
 
